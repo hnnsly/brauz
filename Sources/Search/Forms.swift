@@ -302,6 +302,7 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
           /(^|\\s)webauthn(\\s|$)/i.test(el.getAttribute('autocomplete') || ''));
       }
       function caret(scrolled) {
+        if (scrolled === true && (said === 'false' || said === 'true' || !said)) return;
         var el = document.activeElement;
         // The boxes are only looked for with the caret in one: this runs on
         // every frame of every scroll, and looking goes through the whole page.
@@ -334,8 +335,8 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
         moving = true;
         requestAnimationFrame(function () { moving = false; caret(true); });
       }
-      window.addEventListener('scroll', moved, true);
-      window.addEventListener('resize', moved);
+      window.addEventListener('scroll', moved, { passive: true, capture: true });
+      window.addEventListener('resize', moved, { passive: true });
 
       // Going full screen, announced before it happens rather than after.
       //

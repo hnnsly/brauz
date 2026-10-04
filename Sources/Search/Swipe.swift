@@ -17,26 +17,9 @@ import WebKit
 // is before there is anything to show.
 
 enum Swipe {
-    /// No rubber-banding. Pulling past the top of a page showed a band of
-    /// blank ground above it, and nobody who came from Chrome read that as
-    /// anything but a fault. WebKit lets a view turn off the bounce along
-    /// chosen edges natively through `_setRubberBandingEnabled:`. We keep
-    /// horizontal rubber-banding for two-finger swipe navigation gestures,
-    /// while turning off top and bottom bounce.
-    ///
-    /// Turning this off via CSS `overscroll-behavior-y: none` on `html, body`
-    /// broke mouse-wheel scrolling entirely on any page that had a non-passive
-    /// wheel event listener (WebKit bug rdar://137757208). Native edge
-    /// configuration avoids touching the page's styling and prevents the bug.
-    static func calm(_ web: WKWebView) {
-        let set = NSSelectorFromString("_setRubberBandingEnabled:")
-        guard web.responds(to: set) else { return }
-        typealias Setter = @convention(c) (AnyObject, Selector, UInt) -> Void
-        // _WKRectEdge: one bit per CGRectEdge (_WKRectEdge.h) — the edges
-        // that keep their bounce. Left and right only.
-        let left: UInt = 1 << 0, right: UInt = 1 << 2   // CGRectMinXEdge, CGRectMaxXEdge
-        unsafeBitCast(web.method(for: set), to: Setter.self)(web, set, left | right)
-    }
+    /// Native WebKit rubber-banding on all edges is kept, matching Safari and
+    /// Tauri, so trackpad deceleration and small scrolls retain natural elasticity.
+    static func calm(_ web: WKWebView) {}
 
     /// Whether a sideways swipe here would scroll something. Said once per
     /// change of mind, and at most ten times a second, so the page is never
@@ -87,7 +70,7 @@ enum Swipe {
       }
 
       window.addEventListener('wheel', function (e) {
-        if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+        if (Math.abs(e.deltaX) <= Math.abs(e.deltaY) || Math.abs(e.deltaX) < 6) return;
         if (taken(e)) return say(true);
         // A whiteboard or a map pans with its own wheel handler and nothing
         // under it has overflow to scroll. Its preventDefault is its claim,

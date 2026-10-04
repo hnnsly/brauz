@@ -223,7 +223,6 @@ struct ReadingFill: View {
         Rectangle()
             .fill(Palette.ink.opacity(0.055))
             .frame(width: width * meter.value)
-            .animation(.easeOut(duration: 0.15), value: meter.value)
     }
 }
 
@@ -599,7 +598,10 @@ final class Tab: ObservableObject, Identifiable {
         // PageView, and it moves nothing but a disc.
         web.allowsBackForwardNavigationGestures = false
         Swipe.calm(web)
-        web.onPull = { [weak self] pull in self?.pull = pull }
+        web.onPull = { [weak self] pull in
+            guard let self, self.pull != pull else { return }
+            self.pull = pull
+        }
         web.onTouch = { [weak self] in self?.uncover() }
         web.onKeys = { [weak self] in if let self { self.onKeys?(self) } }
         web.searchName = { [weak self] in self?.searchName?() }
@@ -2019,6 +2021,7 @@ final class PageView: WKWebView {
             stops = nil
             items = []
         }
+        guard showing || pull != nil else { return }
         showing = pull != nil
         onPull?(pull)
     }
@@ -2054,12 +2057,16 @@ final class ScrollRelay: NSObject, WKScriptMessageHandler {
     /// smoothly without us keeps scrolling smoothly with us.
     static let script = """
     (function () {
-      var waiting = false;
+      var waiting = false, last = -1;
       function tell() {
         var root = document.documentElement;
         var y = window.scrollY || root.scrollTop || 0;
         var ceiling = Math.max(1, (root.scrollHeight || 0) - window.innerHeight);
-        window.webkit.messageHandlers.\(name).postMessage({ y: y, max: ceiling });
+        var step = Math.round(Math.min(1, Math.max(0, y / ceiling)) * 100) / 100;
+        if (step !== last) {
+          last = step;
+          window.webkit.messageHandlers.\(name).postMessage({ y: y, max: ceiling });
+        }
       }
       window.addEventListener('scroll', function () {
         if (waiting) return;
