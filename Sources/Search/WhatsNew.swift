@@ -234,7 +234,15 @@ struct WhatsNewCard: View {
 
     /// Read once, as the card opens: a switch turned on here stays in the
     /// list rather than vanishing under the hand.
-    @State private var earlier: [WhatsNew.Toggle]?
+    let earlier: [WhatsNew.Toggle]
+
+    init(release: WhatsNew.Release, prefs: Preferences, close: @escaping () -> Void, notes: @escaping () -> Void) {
+        self.release = release
+        self.prefs = prefs
+        self.close = close
+        self.notes = notes
+        self.earlier = WhatsNew.toggles.filter { WhatsNew.older($0.since, than: release.version) && !$0.get(prefs) }
+    }
 
     private var fresh: [WhatsNew.Toggle] { WhatsNew.toggles.filter { $0.since == release.version } }
 
@@ -243,7 +251,7 @@ struct WhatsNewCard: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     rows(fresh)
-                    if let earlier, !earlier.isEmpty {
+                    if !earlier.isEmpty {
                         Caption("From earlier versions, in case you missed them")
                             .padding(.top, 6)
                         rows(earlier)
@@ -262,11 +270,6 @@ struct WhatsNewCard: View {
                 .buttonStyle(.plain)
                 Spacer()
                 Pill("Close", filled: true, action: close)
-            }
-        }
-        .onAppear {
-            if earlier == nil {
-                earlier = WhatsNew.toggles.filter { WhatsNew.older($0.since, than: release.version) && !$0.get(prefs) }
             }
         }
     }

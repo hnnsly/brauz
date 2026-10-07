@@ -362,6 +362,13 @@ struct WelcomePanel: View {
         let pick: () -> Void
         @State private var hovering = false
 
+        init(title: String, sidebar: Bool, chosen: Bool, pick: @escaping () -> Void) {
+            self.title = title
+            self.sidebar = sidebar
+            self.chosen = chosen
+            self.pick = pick
+        }
+
         var body: some View {
             Button(action: pick) {
                 VStack(alignment: .leading, spacing: 10) {

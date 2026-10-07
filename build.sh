@@ -67,6 +67,17 @@ MINIMUM="14.0"
 # 0.41 ms either way, measured interleaved on 1.0.4 (27 Sep 2026).
 SWIFTFLAGS=(-c "$CONFIG" --arch "$ARCH")
 [ "$CONFIG" = "release" ] && SWIFTFLAGS+=(-Xswiftc -Osize)
+
+# If the Command Line Tools active SDK is MacOSX27 (preview seed with missing macro plugins),
+# fall back to the stable MacOSX26.5.sdk.
+if [ -d "/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk" ]; then
+  RESOLVED_SDK="$(readlink /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk 2>/dev/null || true)"
+  if [[ "$RESOLVED_SDK" == *27* ]]; then
+    export SDKROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk"
+    SWIFTFLAGS+=(--sdk "$SDKROOT")
+  fi
+fi
+
 swift build "${SWIFTFLAGS[@]}"
 BINARY="$(swift build "${SWIFTFLAGS[@]}" --show-bin-path)/Search"
 [ "$(lipo -archs "$BINARY")" = "$ARCH" ] || { echo "$BINARY is not a $ARCH binary" >&2; exit 1; }
