@@ -218,6 +218,12 @@ PLIST
 # which the updater refuses to swap anything in under.
 IDENTITY="${SEARCH_SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null \
   | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"' || true)}"
+# Brauz's own certificate (DOCS/FORK.md), when the keychain has it: not
+# Apple's, so the search above passes it by, but every build signed with it
+# is the same app to macOS, which keeps its passwords and permissions.
+if [ -z "$IDENTITY" ] && security find-certificate -c "Brauz Signing" > /dev/null 2>&1; then
+  IDENTITY="Brauz Signing"
+fi
 # Passkeys need an entitlement Apple grants to browsers on request, and a
 # Developer ID provisioning profile that carries it. With the profile next to
 # this script, both go in; without it, the app is signed as before, because

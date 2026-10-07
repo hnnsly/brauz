@@ -1,0 +1,109 @@
+# Pushing a 'v*' tag triggers this workflow to build and publish Brauz disk images.
+# Builds both Apple Silicon and Intel release DMGs without notarization.
+# Repository secrets (BRAUZ_CERT_P12 and BRAUZ_CERT_PASSWORD) are described in DOCS/FORK.md.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - name: Print tool versions
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Import signing certificate
+        env:
+          BRAUZ_CERT_P12: ${{ secrets.BRAUZ_CERT_P12 }}
+          BRAUZ_CERT_PASSWORD: ${{ secrets.BRAUZ_CERT_PASSWORD }}
+        run: |
+          KC="$RUNNER_TEMP/brauz.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
+
+          echo "$BRAUZ_CERT_P12" | base64 --decode > "$RUNNER_TEMP/brauz.p12"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KC"
+          security import "$RUNNER_TEMP/brauz.p12" -k "$KC" -P "$BRAUZ_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KC"
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+
+      - name: Build Apple Silicon disk image
+        env:
+          SEARCH_SIGN_IDENTITY: Brauz Signing
+        run: ./build.sh release dmg
+
+      - name: Build Intel disk image
+        env:
+          SEARCH_SIGN_IDENTITY: Brauz Signing
+        run: SEARCH_ARCH=x86_64 ./build.sh release dmg
+
+      - name: Verify builds
+        run: |
+          codesign --verify --deep --strict build/Brauz.app
+          codesign --verify --deep --strict build/intel/Brauz.app
+          codesign -d -r- build/Brauz.app 2>&1 | grep -q 'certificate root'
+          test "$(lipo -archs build/Brauz.app/Contents/MacOS/Brauz)" = "arm64"
+          test "$(lipo -archs build/intel/Brauz.app/Contents/MacOS/Brauz)" = "x86_64"
+          test -f build/Brauz.app/Contents/Resources/Assets.car
+
+      - name: Collect disk images
+        run: |
+          mkdir -p dist
+          cp build/Brauz.dmg dist/Brauz.dmg
+          cp build/intel/Brauz.dmg dist/Brauz-Intel.dmg
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          BUILD="$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" build/Brauz.app/Contents/Info.plist)"
+
+          cat << 'EOF' > "$RUNNER_TEMP/notes.md"
+          ## Which file
+
+          - Brauz.dmg for Macs with Apple Silicon (M1 and later)
+          - Brauz-Intel.dmg for Intel Macs
+
+          Needs macOS 14 or later.
+
+          ## Install
+
+          Open the disk image, drag Brauz to Applications.
+
+          ## First launch
+
+          Brauz isn't signed by Apple, so macOS stops it the first time. Open it once, then go to System Settings › Privacy & Security, scroll down, press Open Anyway next to Brauz, and confirm. This is needed again after each new version.
+
+          ## Updates
+
+          Brauz checks this page once a day and says when a new version is out.
+
+          ---
+
+          Brauz is a fork of Search by Office Commun (https://github.com/driceroland/Search).
+          EOF
+
+          gh release create "$GITHUB_REF_NAME" dist/Brauz.dmg dist/Brauz-Intel.dmg \
+            --title "Brauz $VERSION (build $BUILD)" \
+            --notes-file "$RUNNER_TEMP/notes.md"
+
+      - name: Clean up keychain and credentials
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/brauz.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/brauz.p12"

@@ -50,8 +50,20 @@ The rest are edits and deletions inside upstream's files and can't move: the scr
 3. Injected page scripts add no `wheel` listeners, and nothing reports scroll position to the app on every frame. `HoveredLink.script` ignores `mouseover` while the page scrolls.
 4. A suspended tab (`tab.paused`, `WKWebView.isSuspended`) is never asked to run JavaScript or take a snapshot. WebKit throws if it is. `Extensions.swift` and `Tab.swift` guard this.
 5. Shortcuts match the physical key code as well as the character (`NSEvent.shortcutKey`), so they work on Russian and other non-Latin layouts.
-6. `Updater` never checks Office Commun's feed.
+6. `Updater` never checks Office Commun's feed. Brauz looks at its own GitHub releases instead (`BrauzUpdates.swift`), and finds the build number in the release title, so the title keeps the form `Brauz 1.0.4 (build 202610071500)`.
 7. The app is Brauz, `dev.aabc.brauz`, with its data in `Application Support/Brauz`, so it never shares settings, cookies or files with Search. `ForkIdentity.swift` copies Search's once, on Brauz's first run. The icon is drawn in `Icon/icon.swift`; its Dark and Tinted versions need Xcode installed somewhere (build.sh finds it with Spotlight), and without it the Dock darkens the light icon to black on black. Names that only exist inside the code (the Swift package, `Search.sdef`, the keychain label in `Vault.swift`, the test suites) stay Search, which keeps saved passwords readable and syncs with upstream simple.
+
+## Releasing
+
+A tag starting with `v` builds and publishes a release (`.github/workflows/release.yml`):
+
+```bash
+git tag v1.0.4-brauz.2 && git push origin v1.0.4-brauz.2
+```
+
+GitHub builds `Brauz.dmg` for Apple Silicon and `Brauz-Intel.dmg` for Intel on a `macos-26` runner, signs both, and publishes the release with install steps. Brauz on your friends' Macs sees it within a day. Use the upstream version from `VERSION`, then `-brauz.` and a number that goes up.
+
+The signature is a self-signed certificate, "Brauz Signing", not Apple's. macOS asks once per new version (System Settings › Privacy & Security › Open Anyway), but because every release carries the same certificate, it keeps each Mac's passwords and permissions across updates. It lives in two repository secrets, `BRAUZ_CERT_P12` (the .p12, base64) and `BRAUZ_CERT_PASSWORD`, and in your login keychain, where `build.sh` finds it for local builds. Keep the .p12 and its password somewhere safe: a release signed with a new certificate is a different app to macOS, and everyone is asked for their passwords and permissions again.
 
 ## What was measured
 
