@@ -17,9 +17,11 @@ final class LittleWindow: NSObject, NSWindowDelegate {
     private static var open: [LittleWindow] = []
 
     let tab: Tab
-    private weak var browser: Browser?
-    private let window: NSWindow
+    weak var browser: Browser?
+    let window: NSWindow
     private var kept = false
+    /// The address being typed over the page (see LittleExtras.swift).
+    let address = LittleAddress()
 
     /// A link from another app, in a small window in front of it.
     /// `front: false` makes it without showing it — for the bench, which
@@ -30,7 +32,7 @@ final class LittleWindow: NSObject, NSWindowDelegate {
         tab.go(to: url)
         let little = LittleWindow(tab: tab, browser: browser)
         open.append(little)
-        little.window.center()
+        little.position()
         // Never a test run's in front: a probe started hidden stays off every screen.
         guard front, !Store.testing else { return }
         little.window.makeKeyAndOrderFront(nil)
@@ -63,12 +65,13 @@ final class LittleWindow: NSObject, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 420, height: 320)
         window.delegate = self
-        window.contentView = NSHostingView(rootView: LittleView(tab: tab, keep: { [weak self] in self?.keep() }))
+        window.contentView = NSHostingView(rootView: LittleView(tab: tab, keep: { [weak self] in self?.keep() }, little: self))
     }
 
     /// Its keys, before the browser's: ⌘O keeps it, Escape and ⌘W close it.
     /// Everything else is the page's.
     func take(_ event: NSEvent) -> Bool {
+        if keys(event) { return true }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
         if event.keyCode == 53 && flags.isEmpty || key == "w" && flags == .command {
@@ -97,6 +100,7 @@ final class LittleWindow: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        saveFrame()
         if !kept { tab.close() }
         LittleWindow.open.removeAll { $0 === self }
     }
@@ -107,6 +111,8 @@ final class LittleWindow: NSObject, NSWindowDelegate {
 struct LittleView: View {
     @ObservedObject var tab: Tab
     let keep: (() -> Void)?
+    /// The small window's own, for its address field; none in an extension's popup.
+    var little: LittleWindow? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -114,10 +120,7 @@ struct LittleView: View {
                 // Room for the window's own buttons, which sit on this line.
                 Spacer().frame(width: 64)
                 Spacer(minLength: 0)
-                Text(site)
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(Palette.muted)
-                    .lineLimit(1)
+                LittleTitle(little: little, site: site)
                 Spacer(minLength: 0)
                 if let keep {
                     Pill("Open in Search", action: keep)
