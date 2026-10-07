@@ -51,7 +51,7 @@ The rest are edits and deletions inside upstream's files and can't move: the scr
 4. A suspended tab (`tab.paused`, `WKWebView.isSuspended`) is never asked to run JavaScript or take a snapshot. WebKit throws if it is. `Extensions.swift` and `Tab.swift` guard this.
 5. Shortcuts match the physical key code as well as the character (`NSEvent.shortcutKey`), so they work on Russian and other non-Latin layouts.
 6. `Updater` never checks Office Commun's feed.
-7. The app is Brauz, `dev.aabc.brauz`, with its data in `Application Support/Brauz`, so it never shares settings, cookies or files with Search. `ForkIdentity.swift` copies Search's once, on Brauz's first run. The icon is drawn in `Icon/icon.swift`. Names that only exist inside the code (the Swift package, `Search.sdef`, the keychain label in `Vault.swift`, the test suites) stay Search, which keeps saved passwords readable and syncs with upstream simple.
+7. The app is Brauz, `dev.aabc.brauz`, with its data in `Application Support/Brauz`, so it never shares settings, cookies or files with Search. `ForkIdentity.swift` copies Search's once, on Brauz's first run. The icon is drawn in `Icon/icon.swift`; its Dark and Tinted versions need Xcode installed somewhere (build.sh finds it with Spotlight), and without it the Dock darkens the light icon to black on black. Names that only exist inside the code (the Swift package, `Search.sdef`, the keychain label in `Vault.swift`, the test suites) stay Search, which keeps saved passwords readable and syncs with upstream simple.
 
 ## What was measured
 

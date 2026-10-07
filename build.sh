@@ -124,9 +124,16 @@ ICONNAME=""
 ICONCAR="build/AppIcon.car"
 rm -rf "$ICONCAR"
 mkdir -p "$ICONCAR"
+# With the command-line tools selected, actool is Xcode's alone: Spotlight
+# finds an Xcode wherever it is installed, and only actool runs from it.
+ACTOOL=(xcrun actool)
+if ! xcrun --find actool > /dev/null 2>&1; then
+  XCODE="$(mdfind "kMDItemCFBundleIdentifier == 'com.apple.dt.Xcode'" 2> /dev/null | head -1)"
+  [ -n "$XCODE" ] && ACTOOL=(env DEVELOPER_DIR="$XCODE/Contents/Developer" xcrun actool)
+fi
 # Full paths: actool hands the document to a helper that runs elsewhere, and
 # with "build/…" it finds nothing ("Icon export exited with status 255").
-if xcrun actool "$PWD/$ICONDOC" --compile "$PWD/$ICONCAR" --platform macosx \
+if "${ACTOOL[@]}" "$PWD/$ICONDOC" --compile "$PWD/$ICONCAR" --platform macosx \
      --minimum-deployment-target "$MINIMUM" --app-icon AppIcon --optimization space \
      --output-partial-info-plist "$PWD/$ICONCAR/partial.plist" > /dev/null 2>&1 \
    && [ -f "$ICONCAR/Assets.car" ]; then
