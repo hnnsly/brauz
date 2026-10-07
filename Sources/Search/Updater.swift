@@ -53,6 +53,11 @@ final class Updater: ObservableObject {
         Store.testing && ProcessInfo.processInfo.environment["SEARCH_FEED"] != nil
     }
 
+    /// This fork is built from source, and Office Commun's feed would swap
+    /// it for their release of the same app. So it never looks, except a
+    /// test run pointed at a feed of its own.
+    private static var looks: Bool { overridden }
+
     struct Release: Equatable {
         let version: String
         let build: Int
@@ -133,6 +138,7 @@ final class Updater: ObservableObject {
     func checkIfDue(then say: @escaping (String) -> Void) {
         self.say = say
         Swap.sweep()
+        guard Updater.looks else { return }
         // And again every hour for as long as the app is up — a browser that
         // is left open for a week would otherwise never look.
         if clock == nil {
@@ -166,6 +172,10 @@ final class Updater: ObservableObject {
             return
         default: break
         }
+        guard Updater.looks else {
+            say?("Updates are off in this fork: pull from GitHub and build")
+            return
+        }
         guard !checking else { return }
         say?("Checking for updates…")
         check { [weak self] found in
@@ -179,6 +189,7 @@ final class Updater: ObservableObject {
     /// names, or nil when this is the latest; what becomes of it after that
     /// is said through the line handed to `checkIfDue`.
     func check(then done: @escaping (Release?) -> Void) {
+        guard Updater.looks else { done(nil); return }
         guard !checking else { return }
         checking = true
         Task { [weak self] in
