@@ -2,7 +2,7 @@ import SwiftUI
 
 // Settings › About, as Brauz: its own mark and name, the credit to Search it
 // is built from, and where updates and reports go now that they don't go to
-// Office Commun (see ForkIdentity.swift and Updater's `looks`).
+// Office Commun (see ForkIdentity.swift, BrauzUpdates.swift and Updater's `looks`).
 
 enum BrauzAbout {
     static let repository = URL(string: "https://github.com/hnnsly/Search")!
@@ -39,12 +39,32 @@ struct BrauzAboutHeader: View {
     }
 }
 
-/// In place of the updater's rows: Brauz doesn't update itself.
+/// Settings › About: whether a newer release is out on GitHub.
 struct BrauzUpdatesLine: View {
+    @ObservedObject private var updates = BrauzUpdates.shared
+
     var body: some View {
-        Line("Updates", "Brauz doesn't update itself: pull the new version from GitHub and build it") {
-            Pill("GitHub") { NSWorkspace.shared.open(BrauzAbout.repository) }
+        if let newer = updates.newer {
+            Line("Brauz \(newer.version) is out", "Build \(newer.build), on GitHub") {
+                Pill("Download", filled: true) {
+                    NSWorkspace.shared.open(newer.page)
+                }
+            }
+        } else {
+            Line("Updates", detail) {
+                Pill(updates.checking ? "Checking…" : "Check now") {
+                    updates.checkByHand()
+                }
+                .disabled(updates.checking)
+            }
         }
+    }
+
+    private var detail: String {
+        if let last = updates.lastChecked {
+            return "Checked \(last.formatted(.relative(presentation: .named))) — Brauz looks on GitHub once a day"
+        }
+        return "Brauz looks on GitHub once a day"
     }
 }
 

@@ -54,8 +54,9 @@ final class Updater: ObservableObject {
     }
 
     /// This fork is built from source, and Office Commun's feed would swap
-    /// it for their release of the same app. So it never looks, except a
-    /// test run pointed at a feed of its own.
+    /// it for their release of the same app. It never looks at Office
+    /// Commun's feed, except a test run pointed at a feed of its own;
+    /// Brauz looks at its own GitHub releases instead (see BrauzUpdates.swift).
     private static var looks: Bool { overridden }
 
     struct Release: Equatable {
@@ -138,7 +139,7 @@ final class Updater: ObservableObject {
     func checkIfDue(then say: @escaping (String) -> Void) {
         self.say = say
         Swap.sweep()
-        guard Updater.looks else { return }
+        guard Updater.looks else { BrauzUpdates.shared.start(say: say); return }
         // And again every hour for as long as the app is up — a browser that
         // is left open for a week would otherwise never look.
         if clock == nil {
@@ -172,10 +173,7 @@ final class Updater: ObservableObject {
             return
         default: break
         }
-        guard Updater.looks else {
-            say?("Updates are off in this fork: pull from GitHub and build")
-            return
-        }
+        guard Updater.looks else { BrauzUpdates.shared.checkByHand(); return }
         guard !checking else { return }
         say?("Checking for updates…")
         check { [weak self] found in
