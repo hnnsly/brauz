@@ -594,28 +594,11 @@ struct SettingsPanel: View {
 
     private var about: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 14) {
-                Logomark()
-                    .fill(Palette.ink, style: FillStyle(eoFill: true))
-                    .aspectRatio(Logomark.canvas.width / Logomark.canvas.height, contentMode: .fit)
-                    .frame(height: 34)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Search")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Palette.ink)
-                    Text("by Office Commun · version \(Updater.version)")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Palette.muted)
-                }
-            }
+            BrauzAboutHeader()
             .padding(.bottom, 2)
 
             Card {
-                Line(versionTitle, versionDetail) { versionControl }
-                Rule()
-                Line("Install updates on its own", "Off, Search still looks every hour and tells you, and installs only when you press Install") {
-                    Switch(on: $prefs.installsUpdates)
-                }
+                BrauzUpdatesLine()
                 Rule()
                 Line("Found something wrong?", "Opens a draft with the version already in it") {
                     Pill("Send Feedback") { Links.writeFeedback() }

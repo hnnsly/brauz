@@ -35,6 +35,7 @@ The fork's code goes in files of its own where it can, with only a short hook in
 The fork's own files:
 
 - `ForkIdentity.swift`: the Brauz bundle id and data folder, and the one-time copy from Search. Hooks: three lines in `Store.swift`.
+- `BrauzAbout.swift`: Settings › About as Brauz, and feedback going to the fork's GitHub issues. Hooks: two in `Settings.swift`, `writeFeedback` in `Links.swift`.
 - `TabPause.swift`: pausing idle tabs. Hooks: `pauseIdle` in `Sleep.swift`, `paused` in `Tab.swift`, `resume()` in `Browser.swift`.
 - `ShortcutKey.swift`: shortcuts on any keyboard layout (`NSEvent.shortcutKey`).
 - `OmniboxField.swift`: the address field that takes focus reliably. Hook: `AddressField` in `Omnibox.swift`.
