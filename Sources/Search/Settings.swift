@@ -421,11 +421,7 @@ struct SettingsPanel: View {
                 Switch(on: $prefs.bookmarksBar)
             }
             Rule()
-            Line("Show how far you've read", "The tab you're on fills with grey as you scroll down the page") {
-                Switch(on: $prefs.showsReading)
-            }
-            Rule()
-            Line("Sleep tabs you aren't using", "After half an hour away they come back where you left them. Pinned tabs, sound, calls and anything typed stay awake.") {
+            Line("Sleep tabs you aren't using", "After fifteen minutes away they come back where you left them. Tabs idle for two minutes pause in place. Pinned tabs, sound, calls and anything typed stay awake.") {
                 Switch(on: $prefs.sleepsTabs)
             }
             Rule()

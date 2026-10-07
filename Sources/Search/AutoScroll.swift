@@ -69,6 +69,7 @@ enum AutoScroll {
         active.badge.remove();
         document.documentElement.style.cursor = active.cursor;
         removeEventListener('mousemove', move, true);
+        removeEventListener('wheel', stop, true);
         active = null;
       };
 
@@ -85,6 +86,7 @@ enum AutoScroll {
         };
         document.documentElement.style.cursor = 'all-scroll';
         addEventListener('mousemove', move, true);
+        addEventListener('wheel', stop, { capture: true, passive: true });
         active.frame = requestAnimationFrame(tick);
       }, true);
       // Held down and dragged: let go, and it stops.
@@ -99,7 +101,6 @@ enum AutoScroll {
       addEventListener('click', eat, true);
       addEventListener('auxclick', eat, true);
       addEventListener('keydown', (e) => { if (active && e.key === 'Escape') { e.preventDefault(); stop(); } }, true);
-      addEventListener('wheel', stop, { capture: true, passive: true });
       addEventListener('blur', stop);
       document.addEventListener('visibilitychange', stop);
     })();

@@ -1555,7 +1555,10 @@ final class ExtensionTab: NSObject, WKWebExtensionTab {
         Extensions.othersPage(tab?.built?.url, for: context) || Extensions.othersPage(tab?.address, for: context)
     }
 
-    func webView(for context: WKWebExtensionContext) -> WKWebView? { sealed(context) ? nil : tab?.built }
+    func webView(for context: WKWebExtensionContext) -> WKWebView? {
+        guard let tab, !tab.paused, !sealed(context) else { return nil }
+        return tab.built
+    }
     func title(for context: WKWebExtensionContext) -> String? { tab?.title }
     func url(for context: WKWebExtensionContext) -> URL? { sealed(context) ? nil : tab?.address }
     func isLoadingComplete(for context: WKWebExtensionContext) -> Bool { !(tab?.loading ?? false) }
@@ -1607,7 +1610,7 @@ final class ExtensionTab: NSObject, WKWebExtensionTab {
     }
 
     func takeSnapshot(using configuration: WKSnapshotConfiguration, for context: WKWebExtensionContext) async throws -> NSImage? {
-        guard let web = tab?.built, !sealed(context) else { return nil }
+        guard let tab, !tab.paused, let web = tab.built, !sealed(context) else { return nil }
         return try await web.takeSnapshot(configuration: configuration)
     }
 }

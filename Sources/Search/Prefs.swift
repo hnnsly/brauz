@@ -126,9 +126,6 @@ final class Preferences: ObservableObject {
     @Published var searchesSites: Bool {
         didSet { store.set(searchesSites, forKey: "search.sites") }
     }
-    @Published var showsReading: Bool {
-        didSet { store.set(showsReading, forKey: "tabs.reading") }
-    }
     /// The ad blocker. On unless turned off; there is nothing else to it.
     @Published var shielded: Bool {
         didSet { store.set(shielded, forKey: "shield") }
@@ -391,7 +388,6 @@ final class Preferences: ObservableObject {
         startsFresh = store.bool(forKey: Preferences.freshKey)
         searchesSites = store.bool(forKey: "search.sites")
         siteNotifications = store.object(forKey: "notifications.ask") as? Bool ?? true
-        showsReading = store.object(forKey: "tabs.reading") as? Bool ?? true
         shielded = store.object(forKey: "shield") as? Bool ?? true
         let keeps = store.bool(forKey: "sites.keep")
         keepsSignIns = keeps
@@ -457,7 +453,8 @@ final class Preferences: ObservableObject {
         let scrolls = store.bool(forKey: "autoscroll")
         autoScroll = scrolls
         AutoScroll.on = scrolls
-        let fast = store.bool(forKey: "pages.120")
+        let hasExplicitFast = store.object(forKey: "pages.120") != nil
+        let fast = hasExplicitFast ? store.bool(forKey: "pages.120") : !ProcessInfo.processInfo.isLowPowerModeEnabled
         fastPages = fast
         FrameRate.fast = fast
         // Left behind by the Web Inspector's switch, from before it was
@@ -472,6 +469,19 @@ final class Preferences: ObservableObject {
         // Left behind by an assistant this browser no longer has.
         for key in ["mind.model", "mind.effort", "mind.acting", "mind.width", "mind.open"] {
             store.removeObject(forKey: key)
+        }
+        NotificationCenter.default.addObserver(
+            forName: .NSProcessInfoPowerStateDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.store.object(forKey: "pages.120") == nil else { return }
+                let active = !ProcessInfo.processInfo.isLowPowerModeEnabled
+                if self.fastPages != active {
+                    self.fastPages = active
+                }
+            }
         }
     }
 

@@ -27,12 +27,27 @@ final class HoveredLink: NSObject, WKScriptMessageHandler {
         const state = { on: true };
         window.__searchLinks = state;
         let shown = '';
+        let scrolling = false;
+        let scrollTimer = null;
 
         function report(address) {
             if (!state.on || address === shown) return;
             shown = address;
             webkit.messageHandlers.link.postMessage(address);
         }
+
+        function onScroll() {
+            if (!scrolling) {
+                scrolling = true;
+                report('');
+            }
+            clearTimeout(scrollTimer);
+            scrollTimer = setTimeout(() => {
+                scrolling = false;
+            }, 150);
+        }
+
+        addEventListener('scroll', onScroll, { passive: true, capture: true });
 
         // The composed path reaches links inside open shadow trees, where `target` stops at the host.
         function linkIn(path) {
@@ -52,9 +67,12 @@ final class HoveredLink: NSObject, WKScriptMessageHandler {
             return '';
         }
 
-        addEventListener('mouseover', event => report(linkIn(event.composedPath())), { passive: true, capture: true });
+        addEventListener('mouseover', event => {
+            if (!state.on || scrolling) return;
+            report(linkIn(event.composedPath()));
+        }, { passive: true, capture: true });
         // Leaving the frame altogether: there is no next element to enter.
-        addEventListener('mouseout', event => { if (!event.relatedTarget) report(''); }, { passive: true, capture: true });
+        addEventListener('mouseout', event => { if (!event.relatedTarget && !scrolling) report(''); }, { passive: true, capture: true });
         addEventListener('pagehide', () => report(''));
     })();
     """
@@ -84,10 +102,12 @@ final class LinkStatus: ObservableObject {
     /// `page`: the view the page is drawn in, to learn where the pointer is.
     func show(_ address: String?, over page: NSView?) {
         hiding?.cancel()
-        guard let address else {
-            let work = DispatchWorkItem { [weak self] in self?.dismiss() }
-            hiding = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
+        guard let address, !address.isEmpty else {
+            if destination != nil {
+                let work = DispatchWorkItem { [weak self] in self?.dismiss() }
+                hiding = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
+            }
             return
         }
         if destination != address { destination = address }

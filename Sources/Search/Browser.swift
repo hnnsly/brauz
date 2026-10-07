@@ -2396,6 +2396,7 @@ final class Browser: NSObject, ObservableObject {
             typed = ""
             activeID = tab.id
             tab.touch()
+            tab.resume()
             rememberSession()
         } else {
             select(tab)
@@ -2628,14 +2629,17 @@ final class Browser: NSObject, ObservableObject {
         if floatPrevious { leaving() }
         activeID = tab.id
         tab.touch()
+        tab.resume()
         // A tab brought back from last time, or waking from ⌘W while pinned,
         // opens the moment you look at it — and only if there was nothing to
         // wake is this the other case, one whose page quietly died while you
         // were elsewhere, which revive() checks for on its own.
         if !tab.wake() { tab.revive() }
         if let pair = activeSplit,
-           let other = tabs.first(where: { $0.id == (pair.left == tab.id ? pair.right : pair.left) }),
-           !other.isBlank, !other.wake() { other.revive() }
+           let other = tabs.first(where: { $0.id == (pair.left == tab.id ? pair.right : pair.left) }) {
+            other.resume()
+            if !other.isBlank, !other.wake() { other.revive() }
+        }
         rememberSession()
         editing = false
         typed = tab.isBlank ? tab.draft : ""

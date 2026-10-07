@@ -266,8 +266,23 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
           window.webkit.messageHandlers.officeForms.postMessage({ kind: 'settled' });
         }, 400);
       }
-      new MutationObserver(function () {
-        if (!looking) looking = setTimeout(look, 250);
+      new MutationObserver(function (mutations) {
+        if (looking) return;
+        if (!told) {
+          var hasInput = false;
+          for (var i = 0; i < mutations.length; i++) {
+            var added = mutations[i].addedNodes;
+            for (var j = 0; j < added.length; j++) {
+              var n = added[j];
+              if (n.nodeType === 1 && (n.tagName === 'INPUT' || (n.firstElementChild && n.querySelector('input')))) {
+                hasInput = true; break;
+              }
+            }
+            if (hasInput) break;
+          }
+          if (!hasInput) return;
+        }
+        looking = setTimeout(look, 250);
       }).observe(document.documentElement, { childList: true, subtree: true });
 
       // Whether the caret is somewhere on the page that takes typing.
@@ -325,17 +340,14 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
         });
       }
 
-      // The box moves when the page scrolls or the window changes size, and
-      // whatever hangs from it has to move too. Once a frame at most, and
-      // only when something did change: with the caret nowhere near a sign-in,
-      // every frame of every scroll used to send the same answer again.
+      // The box moves when the window changes size, and whatever hangs from
+      // it has to move too.
       var moving = false;
       function moved() {
         if (moving) return;
         moving = true;
-        requestAnimationFrame(function () { moving = false; caret(true); });
+        requestAnimationFrame(function () { moving = false; caret(); });
       }
-      window.addEventListener('scroll', moved, { passive: true, capture: true });
       window.addEventListener('resize', moved, { passive: true });
 
       // Going full screen, announced before it happens rather than after.

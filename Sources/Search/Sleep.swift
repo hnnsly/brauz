@@ -20,16 +20,17 @@ import WebKit
 // a warning, to nothing when it is critical.
 
 extension Browser {
-    /// How long a tab has to go without being looked at. Half an hour, or
-    /// `sleep.after` in seconds — for the bench and the measurements.
+    /// How long a tab has to go without being looked at. Fifteen minutes, or
+    /// `sleep.after` in seconds — for the bench and the measurements. It is
+    /// paused well before that (see TabPause.swift).
     static var sleepAfter: TimeInterval {
         let set = Store.settings.double(forKey: "sleep.after")
-        return set > 0 ? set : 30 * 60
+        return set > 0 ? set : 15 * 60
     }
 
     /// Started once, at launch.
     func watchForSleep() {
-        let every = min(60, max(5, Browser.sleepAfter / 4))
+        let every = min(30, max(5, Browser.pauseAfter / 4))
         let timer = Timer(timeInterval: every, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.sleepIdle() }
         }
@@ -59,13 +60,15 @@ extension Browser {
             .filter { now.timeIntervalSince($0.touched) >= wait && awake(because: $0) == nil }
             .sorted { $0.touched < $1.touched }
         for tab in idle { self.sleep(tab) }
+        pauseIdle(within: given)
     }
 
     /// Why a tab has to stay awake — nil when nothing keeps it. The clock is
     /// the caller's business; this is everything else.
-    func awake(because tab: Tab) -> String? {
+    /// A pinned tab may be paused, but never put to sleep.
+    func awake(because tab: Tab, forSleep: Bool = true) -> String? {
         if visibleTabIDs.contains(tab.id) { return "on screen" }
-        if tab.pin != nil { return "pinned" }
+        if forSleep, tab.pin != nil { return "pinned" }
         if tab.bench { return "a bench tab" }
         if tab.isBlank { return "blank" }
         if tab.asleep { return "already asleep" }
@@ -96,6 +99,12 @@ extension Browser {
     func sleep(_ tab: Tab, done: ((String) -> Void)? = nil) {
         if let reason = awake(because: tab) {
             done?(reason)
+            return
+        }
+        // Paused, it was pictured and checked for typing on the way.
+        if tab.paused {
+            tab.sleep(picture: tab.picture)
+            done?("asleep")
             return
         }
         tab.unsaved { [weak self, weak tab] typed in

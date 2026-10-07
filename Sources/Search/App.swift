@@ -376,12 +376,20 @@ struct ContentView: View {
             // it and is resized once, not on every frame of the slide: laid out
             // again thirty times a second, the page juddered along its right
             // edge and overshot the window with the spring (see `room`).
-            stage
-                .padding(.leading, sideOnRight ? 0 : roomed.width)
-                .padding(.trailing, sideOnRight ? roomed.width : 0)
-                .padding(.top, roomed.height)
-                .offset(x: sideOnRight ? 0 : chrome.width - roomed.width,
-                        y: chrome.height - roomed.height)
+            let dx = sideOnRight ? CGFloat.zero : chrome.width - roomed.width
+            let dy = chrome.height - roomed.height
+            if dx == 0 && dy == 0 {
+                stage
+                    .padding(.leading, sideOnRight ? 0 : roomed.width)
+                    .padding(.trailing, sideOnRight ? roomed.width : 0)
+                    .padding(.top, roomed.height)
+            } else {
+                stage
+                    .padding(.leading, sideOnRight ? 0 : roomed.width)
+                    .padding(.trailing, sideOnRight ? roomed.width : 0)
+                    .padding(.top, roomed.height)
+                    .offset(x: dx, y: dy)
+            }
 
             // The column of tabs, in the way that has one. It takes the full
             // height, so the traffic lights sit in its own corner rather than
@@ -927,6 +935,7 @@ struct ContentView: View {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.backgroundColor = Palette.NS.ground
+        window.isOpaque = true
         // The strip does the dragging, so the page underneath can't be grabbed
         // by accident while selecting text.
         window.isMovableByWindowBackground = false

@@ -27,7 +27,7 @@ enum Web {
     /// opened by a link inherits its opener's configuration, handlers
     /// included, and registering a name twice is a hard crash.
     @MainActor static func release(_ controller: WKUserContentController) {
-        for name in [ScrollRelay.name, VeilRelay.name, FormRelay.name, ImageRelay.name,
+        for name in [VeilRelay.name, FormRelay.name, ImageRelay.name,
                      StoreRelay.name, PasskeyRelay.name, MiddleRelay.name, IconRelay.name] {
             controller.removeScriptMessageHandler(forName: name, contentWorld: world)
             controller.removeScriptMessageHandler(forName: name, contentWorld: .page)
@@ -203,29 +203,6 @@ enum Autoplay {
     }
 }
 
-/// How far down its page a tab is. Its own object, watched by the fill in
-/// the tab's pill alone: as part of the tab, every percent scrolled re-ran
-/// everything that watches the tab — the page's stage, the buttons, the
-/// row — two to four milliseconds of the window's time each, while WebKit
-/// needed that thread to put the scrolled page on screen.
-@MainActor
-final class Reading: ObservableObject {
-    @Published var value: Double = 0
-}
-
-/// The fill itself: the grey that grows from the left of the tab you are on
-/// as you read down its page, in a width it is given.
-struct ReadingFill: View {
-    @ObservedObject var meter: Reading
-    let width: CGFloat
-
-    var body: some View {
-        Rectangle()
-            .fill(Palette.ink.opacity(0.055))
-            .frame(width: width * meter.value)
-    }
-}
-
 @MainActor
 final class Tab: ObservableObject, Identifiable {
     let id = UUID()
@@ -319,14 +296,8 @@ final class Tab: ObservableObject, Identifiable {
     /// Set when the page never arrived — no host, no network, a refused
     /// connection. Shown in place of the page rather than in a dialog.
     @Published var failure: String?
-    /// How far down the page you are, nought to one. The tab's own pill fills
-    /// with it. Kept apart from the rest of the tab (see Reading): it changes
-    /// all the way down a page, and only the fill has any use for it.
-    let meter = Reading()
-    var reading: Double {
-        get { meter.value }
-        set { if meter.value != newValue { meter.value = newValue } }
-    }
+    /// Suspended in place, still in memory (see TabPause.swift).
+    var paused = false
 
     /// True while the page has been stripped back to its article.
     @Published private(set) var reader = false
@@ -383,9 +354,6 @@ final class Tab: ObservableObject, Identifiable {
 
     /// True while this tab's page is out in the little window.
     @Published var floating = false
-
-    /// A sideways swipe in progress, for the disc that shows it.
-    @Published var pull: Pull?
 
     /// What a site opens at until you zoom it yourself: Settings › General ›
     /// Page zoom. Read from the file, not from the one object the window holds.
@@ -478,7 +446,6 @@ final class Tab: ObservableObject, Identifiable {
     /// place — so the bar at the bottom of the window doesn't offer it twice.
     @Published var storePlaced: String?
 
-    private let relay = ScrollRelay()
     private let veils_ = VeilRelay()
     private let forms = FormRelay()
     private let images = ImageRelay()
@@ -552,7 +519,7 @@ final class Tab: ObservableObject, Identifiable {
     /// view built to wake it, so it opens exactly where this one was left.
     private var memory: Any?
     /// The last picture of that page, compressed, for the moment it wakes.
-    private var picture: Data?
+    var picture: Data?
     /// That picture, over the stage while the page is rebuilt underneath it:
     /// coming back to a tab that slept starts from what you left, not white.
     @Published private(set) var cover: NSImage?
@@ -593,15 +560,9 @@ final class Tab: ObservableObject, Identifiable {
         // else on a Mac. ⌘+ and ⌘- are the other thing — they lay the page out
         // again at a bigger size — and both are worth having.
         web.allowsMagnification = true
-        // WebKit's own two-finger swipe stays off. It drags the page across
-        // the window with a picture of the last one behind it; ours is in
-        // PageView, and it moves nothing but a disc.
-        web.allowsBackForwardNavigationGestures = false
-        Swipe.calm(web)
-        web.onPull = { [weak self] pull in
-            guard let self, self.pull != pull else { return }
-            self.pull = pull
-        }
+        // Native WebKit two-finger navigation gestures (identical to Safari),
+        // animated asynchronously on the GPU without main-thread or JavaScript interruption.
+        web.allowsBackForwardNavigationGestures = true
         web.onTouch = { [weak self] in self?.uncover() }
         web.onKeys = { [weak self] in if let self { self.onKeys?(self) } }
         web.searchName = { [weak self] in self?.searchName?() }
@@ -629,7 +590,6 @@ final class Tab: ObservableObject, Identifiable {
         // opener's.
         let controller = web.configuration.userContentController
         Web.release(controller)
-        controller.add(relay, contentWorld: Web.world, name: ScrollRelay.name)
         controller.add(veils_, contentWorld: Web.world, name: VeilRelay.name)
         controller.add(images, contentWorld: Web.world, name: ImageRelay.name)
         controller.add(shop, contentWorld: Web.world, name: StoreRelay.name)
@@ -688,7 +648,6 @@ final class Tab: ObservableObject, Identifiable {
             },
         ]
 
-        relay.tab = self
         veils_.tab = self
         forms.tab = self
         images.tab = self
@@ -733,9 +692,6 @@ final class Tab: ObservableObject, Identifiable {
         let controller = built.configuration.userContentController
         controller.removeAllUserScripts()
         controller.addUserScript(
-            WKUserScript(source: ScrollRelay.script, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: Web.world)
-        )
-        controller.addUserScript(
             WKUserScript(source: Veiling.picker, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: Web.world)
         )
         controller.addUserScript(
@@ -749,11 +705,6 @@ final class Tab: ObservableObject, Identifiable {
                 WKUserScript(source: AutoScroll.script, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: Web.world)
             )
         }
-        // Every frame: a swipe over an embedded map is the map's, and only the
-        // map's own document can say so.
-        controller.addUserScript(
-            WKUserScript(source: Swipe.watch, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: Web.world)
-        )
         controller.addUserScript(
             WKUserScript(source: ImageRelay.watch, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: Web.world)
         )
@@ -925,17 +876,6 @@ final class Tab: ObservableObject, Identifiable {
     func pickingEnded() { onPickEnd?(self) }
     func pickingFailed(_ reason: String) { onPickTrouble?(self, reason) }
 
-    /// Called from the page, a few dozen times a second at most — the script
-    /// already waits for a frame before it says anything.
-    func scrolled(to y: Double, of ceiling: Double) {
-        // In hundredths, and only when that changes. The page reports once a
-        // frame while it scrolls — 120 times a second on a 120 Hz screen — and
-        // each new value had the window redraw the tab's fill, a third of a
-        // core on the thread WebKit needs to put the scrolled page on screen.
-        let fraction = ceiling > 0 ? (min(1, max(0, y / ceiling)) * 100).rounded() / 100 : 0
-        if fraction != reading { reading = fraction }
-    }
-
     func go(to url: URL) {
         // Judged by the page it shows, not by how it was made: a tab an
         // extension's page opened with window.open is built from that
@@ -953,7 +893,7 @@ final class Tab: ObservableObject, Identifiable {
         held = nil
         title = ""
         failure = nil
-        reading = 0
+        paused = false
         reader = false
         typing = false
         immersed = false
@@ -990,10 +930,9 @@ final class Tab: ObservableObject, Identifiable {
         pending = url
         memory = nil
         picture = nil
-        reading = 0
+        paused = false
         noisy = false
         stale = false
-        pull = nil
         // Loading about:blank here looked like letting the page go, and
         // wasn't: WebKit keeps the document it just left in the back-forward
         // cache — alive, suspended, and still counted by its own origin as an
@@ -1015,7 +954,6 @@ final class Tab: ObservableObject, Identifiable {
         self.picture = picture
         pending = url
         stale = false
-        pull = nil
         discard()
     }
 
@@ -1045,7 +983,7 @@ final class Tab: ObservableObject, Identifiable {
     /// half-filled form. A page that can't answer is treated as holding
     /// nothing: a PDF, an image, a page whose process has already gone.
     func unsaved(_ done: @escaping (Bool) -> Void) {
-        guard let built else { return done(false) }
+        guard let built, !built.isSuspended else { return done(false) }
         built.evaluateInSearch(
             "!!(window.__officeForms && window.__officeForms.unsaved && window.__officeForms.unsaved())"
         ) { value in
@@ -1057,7 +995,7 @@ final class Tab: ObservableObject, Identifiable {
     /// process, so a view that is off screen — every tab but the one you are
     /// on — can still be pictured. Nil when there is nothing to draw.
     func snapshot(_ done: @escaping (Data?) -> Void) {
-        guard let built else { return done(nil) }
+        guard let built, !built.isSuspended else { return done(picture) }
         built.takeSnapshot(with: nil) { image, _ in
             guard let image, let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
                 return done(nil)
@@ -1234,7 +1172,7 @@ final class Tab: ObservableObject, Identifiable {
         guard let url = pending else { return false }
         pending = nil
         failure = nil
-        reading = 0
+        paused = false
         reader = false
         typing = false
         immersed = false
@@ -1319,13 +1257,13 @@ final class Tab: ObservableObject, Identifiable {
     private func discard() {
         watch = []
         ears.stop()
+        paused = false
         guard let web = built else { return }
         built = nil
         Passkeys.shared.forget(web)
         let controller = web.configuration.userContentController
         Web.release(controller)
         controller.removeAllUserScripts()
-        web.onPull = nil
         web.onTouch = nil
         web.onKeys = nil
         web.searchName = nil
@@ -1568,8 +1506,6 @@ final class PageView: WKWebView {
         if !words.isEmpty { onSearch?(words) }
     }
 
-    /// Told where a sideways swipe has got to, and nil when there is none.
-    var onPull: ((Pull?) -> Void)?
     /// Told the moment the page is reached for — a click, a scroll — so the
     /// picture of a tab waking up never stands between you and the page.
     var onTouch: (() -> Void)?
@@ -1688,52 +1624,8 @@ final class PageView: WKWebView {
     /// Safari takes down the picture it shows while a page comes back.
     static let firstFrame: UInt = 1 << 1
 
-    // MARK: - two fingers sideways
-
-    private enum Axis { case across, down }
-
-    private var sideways: CGFloat = 0
-    private var gatheredX: CGFloat = 0
-    private var gatheredY: CGFloat = 0
-    private var axis: Axis?
-    /// Which way the gesture set off, decided once and kept. Turning round
-    /// mid-swipe pulls the disc back; it never becomes the other disc.
-    private var back = true
-    /// The page's word on whether this swipe is its own. Nil until it says.
-    private var free: Bool?
-    private var asked: Date?
-    /// Already went somewhere, or was refused: nothing more this gesture.
-    private var spent = false
-    private var armedNow = false
-    private var showing = false
-    private var going = false
-    private var pulls = 0
-    /// Armed and held there: in a moment the disc becomes the list of pages
-    /// that way, and moving the fingers up or down picks one (as in Dia).
-    private var holding: DispatchWorkItem?
-    private var stops: [Stop]?
-    private var items: [WKBackForwardListItem] = []
-    private var picked = 0
-    /// How far the fingers have gone up (or down, below nought) since the
-    /// last step through the list.
-    private var climbed: CGFloat = 0
-    /// Settings › General › Hold a swipe to pick from history. Off unless
-    /// asked for; off, a held swipe is a swipe like any other.
+    /// Settings › General › Hold a swipe to pick from history.
     static var holdsHistory = false
-    /// How long armed before the list, and how far up or down a step is.
-    private static let hold: TimeInterval = 0.45
-    private static let step: CGFloat = 22
-
-    /// How far the fingers travel before letting go means it. It was 110,
-    /// and going back took a long reach across the trackpad — "too far",
-    /// people said; Safari goes on less.
-    private static let arm: CGFloat = 70
-    /// A quick flick goes too, short of that, as it does in Safari: at least
-    /// this far, within `flickTime` of setting off.
-    private static let flick: CGFloat = 30
-    private static let flickTime: TimeInterval = 0.25
-    /// Less than this and there is nothing to show yet — or nothing left to.
-    private static let show: CGFloat = 6
 
     // MARK: - two fingers together
 
@@ -1814,268 +1706,6 @@ final class PageView: WKWebView {
         })(\(x), \(y), \(scale), \(width))
         """
     }
-
-    override func scrollWheel(with event: NSEvent) {
-        onTouch?()
-        // The page gets every event first and scrolls as it always did. The
-        // swipe is only read, never taken — except while its list is open,
-        // when up and down are picking a page, not scrolling this one. The
-        // gesture's end still reaches the page, which saw it begin.
-        if stops == nil || event.phase == .ended || event.phase == .cancelled {
-            super.scrollWheel(with: event)
-        }
-        // Only a live trackpad gesture — not its glide afterwards, and not a
-        // mouse wheel, which has no beginning or end to speak of.
-        guard event.momentumPhase == [] else { return }
-
-        switch event.phase {
-        case .mayBegin, .began:
-            sideways = 0
-            gatheredX = 0
-            gatheredY = 0
-            axis = nil
-            free = nil
-            asked = nil
-            spent = false
-            armedNow = false
-            showing = false
-            holding?.cancel()
-            holding = nil
-            stops = nil
-            items = []
-            // A disc still on its way out belongs to the last gesture. It is
-            // already invisible; it is only taken off the stage so the next
-            // one arrives fresh rather than fading back in.
-            pulls += 1
-            if going {
-                going = false
-                onPull?(nil)
-            }
-        case .changed:
-            guard !spent else { return }
-            if axis == nil {
-                // A few points in, the gesture has shown which way it means
-                // to go. Only a clearly sideways one is read further.
-                gatheredX += abs(event.scrollingDeltaX)
-                gatheredY += abs(event.scrollingDeltaY)
-                sideways += event.scrollingDeltaX
-                guard gatheredX + gatheredY > 6 else { return }
-                axis = gatheredX > gatheredY * 1.3 ? .across : .down
-                if axis == .down {
-                    spent = true
-                    return
-                }
-                back = sideways > 0
-                // Nowhere to go that way: nothing to show, and nothing more
-                // to read from this gesture.
-                if back ? !canGoBack : !canGoForward {
-                    spent = true
-                    return
-                }
-                asked = Date()
-                tell()
-                return
-            }
-            sideways += event.scrollingDeltaX
-            if stops != nil { climb(event) }
-            tell()
-        case .ended:
-            release()
-        case .cancelled:
-            spent = true
-            settle(nil)
-        default:
-            break
-        }
-    }
-
-    /// The page has said whether the swipe would scroll something.
-    func answer(free yes: Bool) {
-        guard axis != .down, !spent else { return }
-        guard yes else {
-            free = false
-            spent = true
-            settle(nil)
-            return
-        }
-        guard free == nil else { return }
-        free = true
-        tell()
-    }
-
-    /// Only the distance in the direction it set off in. Past the origin the
-    /// other way is just nought.
-    private var travel: CGFloat { max(0, back ? sideways : -sideways) }
-
-    private func tell() {
-        if free == nil, let asked, Date().timeIntervalSince(asked) > 0.18 {
-            // A page that never answers — a PDF, a page that failed to load —
-            // still has to be leavable by hand.
-            free = true
-        }
-        guard free == true else { return }
-
-        let travel = travel
-        // Drawn all the way back, the disc goes; drawn out again, it returns.
-        // Nothing is decided until the fingers lift.
-        guard travel >= PageView.show else {
-            if showing { settle(nil) }
-            return
-        }
-
-        let armed = travel >= PageView.arm
-        if PageView.holdsHistory, stops == nil, armed != armedNow {
-            holding?.cancel()
-            holding = nil
-            if armed {
-                let hold = DispatchWorkItem { [weak self] in self?.openList() }
-                holding = hold
-                DispatchQueue.main.asyncAfter(deadline: .now() + PageView.hold, execute: hold)
-            }
-        }
-        if armed != armedNow, stops == nil {
-            // Two different taps: one for reaching it, a lighter one for
-            // stepping back from it, so you know without looking that
-            // letting go now is safe.
-            NSHapticFeedbackManager.defaultPerformer.perform(
-                armed ? .levelChange : .alignment, performanceTime: .now
-            )
-        }
-        armedNow = armed
-        settle(Pull(back: back, travel: travel, armed: armed, going: false, stops: stops, picked: picked))
-    }
-
-    /// Held long enough: the pages that way, nearest to the fingers — at the
-    /// bottom going back, at the top going forward — and that one picked.
-    private func openList() {
-        holding = nil
-        guard !spent, armedNow, stops == nil else { return }
-        let list = back ? Array(backForwardList.backList.suffix(8)) : Array(backForwardList.forwardList.prefix(8))
-        guard list.count >= 2 else { return }
-        items = list
-        stops = list.map { Stop(title: $0.title ?? "", url: $0.url) }
-        picked = back ? list.count - 1 : 0
-        climbed = 0
-        NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
-        tell()
-    }
-
-    /// Through the list a step at a time, the list sliding with the fingers
-    /// under a light that stays put, as in Dia: down brings the row above
-    /// under it — further back, or nearer going forward — and up the row
-    /// below. With natural scrolling the deltas run with the fingers,
-    /// without it against them.
-    private func climb(_ event: NSEvent) {
-        guard let stops else { return }
-        let sign: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
-        climbed += -sign * event.scrollingDeltaY
-        var moved = false
-        while climbed >= PageView.step, picked < stops.count - 1 {
-            picked += 1
-            climbed -= PageView.step
-            moved = true
-        }
-        while climbed <= -PageView.step, picked > 0 {
-            picked -= 1
-            climbed += PageView.step
-            moved = true
-        }
-        // At either end, the fingers going on further count for nothing.
-        climbed = max(-PageView.step, min(PageView.step, climbed))
-        if moved { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now) }
-    }
-
-    private func release() {
-        defer { spent = true }
-        // Let go before the list came: it doesn't come now.
-        holding?.cancel()
-        holding = nil
-        let flicked = !spent && free == true && travel >= PageView.flick
-            && (asked.map { Date().timeIntervalSince($0) <= PageView.flickTime } ?? false)
-        guard !spent, free == true, armedNow || flicked || stops != nil else {
-            settle(nil)
-            return
-        }
-        going = true
-        settle(Pull(back: back, travel: travel, armed: true, going: true, stops: stops, picked: picked))
-        if stops != nil, items.indices.contains(picked) {
-            go(to: items[picked])
-        } else if back {
-            goBack()
-        } else {
-            goForward()
-        }
-        pulls += 1
-        let mine = pulls
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) { [weak self] in
-            guard let self, pulls == mine else { return }
-            going = false
-            settle(nil)
-        }
-    }
-
-    private func settle(_ pull: Pull?) {
-        if pull == nil {
-            holding?.cancel()
-            holding = nil
-            stops = nil
-            items = []
-        }
-        guard showing || pull != nil else { return }
-        showing = pull != nil
-        onPull?(pull)
-    }
-
-}
-
-/// Carries the page's scroll position back to its tab.
-///
-/// A content controller holds its handlers strongly, so this stands between the
-/// two rather than the tab registering itself — otherwise a closed tab is kept
-/// alive by the very page it was told to stop showing.
-final class ScrollRelay: NSObject, WKScriptMessageHandler {
-    static let name = "officeScroll"
-
-    weak var tab: Tab?
-
-    func userContentController(
-        _ controller: WKUserContentController,
-        didReceive message: WKScriptMessage
-    ) {
-        guard let body = message.body as? [String: Any] else { return }
-        if let side = body["side"] as? String {
-            MainActor.assumeIsolated { tab?.web.answer(free: side == "free") }
-            return
-        }
-        guard let y = body["y"] as? Double,
-              let ceiling = body["max"] as? Double
-        else { return }
-        MainActor.assumeIsolated { tab?.scrolled(to: y, of: ceiling) }
-    }
-
-    /// Reports at most once a frame, and passively, so a page that scrolls
-    /// smoothly without us keeps scrolling smoothly with us.
-    static let script = """
-    (function () {
-      var waiting = false, last = -1;
-      function tell() {
-        var root = document.documentElement;
-        var y = window.scrollY || root.scrollTop || 0;
-        var ceiling = Math.max(1, (root.scrollHeight || 0) - window.innerHeight);
-        var step = Math.round(Math.min(1, Math.max(0, y / ceiling)) * 100) / 100;
-        if (step !== last) {
-          last = step;
-          window.webkit.messageHandlers.\(name).postMessage({ y: y, max: ceiling });
-        }
-      }
-      window.addEventListener('scroll', function () {
-        if (waiting) return;
-        waiting = true;
-        requestAnimationFrame(function () { waiting = false; tell(); });
-      }, { passive: true });
-      tell();
-    })();
-    """
 }
 
 
@@ -2104,6 +1734,10 @@ extension WKWebView {
     /// scripts are, answered the way `evaluateJavaScript` answers: the value,
     /// or nil for none or an error.
     func evaluateInSearch(_ js: String, then: ((Any?) -> Void)? = nil) {
+        guard !isSuspended else {
+            then?(nil)
+            return
+        }
         evaluateJavaScript(js, in: nil, in: Web.world) { result in
             then?(try? result.get())
         }

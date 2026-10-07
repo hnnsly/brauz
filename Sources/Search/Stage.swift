@@ -56,142 +56,10 @@ struct Page: View {
                 Trouble(message: failure) { tab.reload() }
                     .transition(.opacity)
             }
-
-            if let pull = tab.pull, pull.stops != nil {
-                // In the disc's place, grown from its own edge: it sits in a
-                // frame as wide as the window, and grown from that frame's
-                // middle it would slide in from the middle.
-                HistoryList(pull: pull)
-                    .id(pull.back)
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.92, anchor: pull.back ? .leading : .trailing)),
-                        removal: .opacity.combined(with: .scale(scale: 0.96, anchor: pull.back ? .leading : .trailing))
-                    ))
-            } else if let pull = tab.pull {
-                Disc(pull: pull)
-                    // A disc for each edge, never one that changes edges: a
-                    // view whose alignment flips is a view that glides the
-                    // whole way across the window to get there.
-                    .id(pull.back)
-                    // A short fade and a little growth, both ways. Anything
-                    // longer is still arriving when a quick flick has already
-                    // let go.
-                    .transition(.opacity.combined(with: .scale(scale: 0.85)))
-            }
         }
         .animation(Motion.quick, value: tab.failure)
         .animation(Motion.quick, value: tab.floating)
         .animation(.easeOut(duration: 0.2), value: tab.cover == nil)
-        .animation(.easeOut(duration: 0.16), value: tab.pull == nil)
-    }
-}
-
-/// The disc a sideways swipe brings in from the edge.
-///
-/// White, with a hairline, like everything else that floats over a page. A
-/// line of ink winds round it as the fingers go and closes at the point where
-/// letting go would mean it. Turn back and it unwinds. Let go while it is
-/// closed and the disc leaves with the page.
-///
-/// It follows the fingers directly, with no spring between: a spring reads
-/// as lag on a quick flick, and a quick flick is how most people swipe.
-private struct Disc: View {
-    let pull: Pull
-
-    var body: some View {
-        // The fingers can travel as far as they like; the disc stops short.
-        let reach = 150 * (1 - exp(-pull.travel / 110))
-        let grown = min(1, pull.travel / 110)
-        let scale: CGFloat = pull.going ? 1.08 : 0.86 + 0.14 * grown
-
-        ZStack {
-            Circle()
-                .fill(Palette.ground)
-            Circle()
-                .strokeBorder(Palette.hairline, lineWidth: 1)
-            // How far there is to go, wound round the edge, closed when it
-            // is armed.
-            Circle()
-                .trim(from: 0, to: grown)
-                .stroke(Palette.ink, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .padding(0.75)
-            Image(systemName: pull.back ? "arrow.left" : "arrow.right")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Palette.ink.opacity(0.4 + 0.6 * grown))
-        }
-        .frame(width: 52, height: 52)
-        .shadow(color: .black.opacity(0.12), radius: 16, y: 6)
-        .scaleEffect(scale)
-        .opacity(pull.going ? 0 : 1)
-        // Whole from the first point, a little way in from the edge, drawn
-        // further in as the fingers go — and a step further on its way out
-        // with the page.
-        .offset(x: (pull.back ? 1 : -1) * (10 + reach * 0.2 + (pull.going ? 12 : 0)))
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: pull.back ? .leading : .trailing)
-        .allowsHitTesting(false)
-        .animation(.easeOut(duration: 0.22), value: pull.going)
-    }
-}
-
-/// A swipe held once armed: the pages that way, in place of the disc, at
-/// the same edge. The one letting go would open is lit, and stays where the
-/// disc was while the list slides under it with the fingers (see
-/// PageView.climb). Let go, it fades where it is.
-private struct HistoryList: View {
-    let pull: Pull
-
-    /// A row and the gap under it.
-    private static let pitch: CGFloat = 30
-
-    var body: some View {
-        let reach = 150 * (1 - exp(-pull.travel / 110))
-        let count = pull.stops?.count ?? 0
-        // The lit row's middle on the disc's line, the list around it.
-        let slide = -(CGFloat(pull.picked) - CGFloat(count - 1) / 2) * HistoryList.pitch
-        VStack(spacing: 2) {
-            ForEach(Array((pull.stops ?? []).enumerated()), id: \.offset) { index, stop in
-                HStack(spacing: 8) {
-                    icon(stop.url)
-                        .frame(width: 14, height: 14)
-                    Text(stop.title.isEmpty ? (stop.url.host() ?? stop.url.absoluteString) : stop.title)
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(index == pull.picked ? Palette.ink : Palette.ink.opacity(0.75))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 9)
-                .frame(height: 28)
-                .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(Palette.ink.opacity(index == pull.picked ? 0.10 : 0))
-                )
-            }
-        }
-        .padding(5)
-        .frame(width: 240)
-        .background(Palette.ground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.hairline, lineWidth: 1))
-        .shadow(color: .black.opacity(0.16), radius: 18, y: 6)
-        .scaleEffect(pull.going ? 0.96 : 1)
-        .opacity(pull.going ? 0 : 1)
-        .offset(x: (pull.back ? 1 : -1) * (10 + reach * 0.2), y: slide)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: pull.back ? .leading : .trailing)
-        .allowsHitTesting(false)
-        .animation(.spring(response: 0.22, dampingFraction: 0.9), value: pull.picked)
-        .animation(.easeOut(duration: 0.26), value: pull.going)
-    }
-
-    @ViewBuilder
-    private func icon(_ url: URL) -> some View {
-        if let site = Favicons.site(url), let image = Favicons.shared.cached(site) {
-            Image(nsImage: image).resizable().interpolation(.high)
-        } else {
-            Image(systemName: "globe")
-                .font(.system(size: 11))
-                .foregroundStyle(Palette.muted)
-        }
     }
 }
 
@@ -209,6 +77,13 @@ struct WebStage: NSViewRepresentable {
 }
 
 final class StageView: NSView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
     /// What this stage has been told to show, and the only thing it keeps.
     ///
     /// It used to track that *and* what it was holding, and reconcile the two.
@@ -250,12 +125,15 @@ final class StageView: NSView {
     }
 
     func show(_ page: NSView?) {
-        if let leaving = wanted, leaving !== page, let dock = subviews.first(where: Self.isInspector) {
+        let changed = wanted !== page
+        if let leaving = wanted, changed, let dock = subviews.first(where: Self.isInspector) {
             Self.docks.setObject(dock, forKey: leaving)
             dock.removeFromSuperview()
         }
         wanted = page
-        settle()
+        if changed || (wanted != nil && wanted?.superview !== self) {
+            settle()
+        }
     }
 
     private func settle() {
@@ -288,21 +166,17 @@ final class StageView: NSView {
                 addSubview(dock, positioned: .below, relativeTo: wanted)
             }
             Self.docks.removeObject(forKey: wanted)
-            // Full size, which WebKit, with its inspector back, cuts down to
-            // make room for it again at the stage's size now.
-            wanted.frame = bounds
-            // A web view coming back into a window sometimes keeps the last
-            // picture it had — which, after a while out of one, is nothing.
-            // Asking it to draw again is cheap and is what brings it back.
-            wanted.needsLayout = true
-            wanted.needsDisplay = true
-            wanted.layer?.setNeedsDisplay()
+            if wanted.frame != bounds {
+                wanted.frame = bounds
+            }
         }
         // With the inspector docked, WebKit lays the page and it out side by
         // side as this view changes size; setting the page's frame here would
         // cover the inspector.
         if !(docked && subviews.contains(where: Self.isInspector)) {
-            wanted.frame = bounds
+            if wanted.frame != bounds {
+                wanted.frame = bounds
+            }
         }
     }
 
@@ -320,7 +194,7 @@ final class StageView: NSView {
     }
 
     private static func isInspector(_ view: NSView) -> Bool {
-        String(describing: type(of: view)).hasPrefix("WKInspector")
+        NSStringFromClass(type(of: view)).hasPrefix("WKInspector")
     }
 }
 
