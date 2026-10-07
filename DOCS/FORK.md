@@ -1,6 +1,6 @@
 # This fork
 
-`hnnsly/Search` is a fork of [driceroland/Search](https://github.com/driceroland/Search). Its `main` is upstream's `main` with a short stack of the fork's commits on top. There is no mirror branch; `upstream/main`, which `git fetch upstream` keeps current, is the base.
+`hnnsly/Search` is Brauz, a fork of [driceroland/Search](https://github.com/driceroland/Search). Its `main` is upstream's `main` with a short stack of the fork's commits on top. There is no mirror branch; `upstream/main`, which `git fetch upstream` keeps current, is the base.
 
 To see exactly what the fork adds:
 
@@ -34,6 +34,7 @@ The fork's code goes in files of its own where it can, with only a short hook in
 
 The fork's own files:
 
+- `ForkIdentity.swift`: the Brauz bundle id and data folder, and the one-time copy from Search. Hooks: three lines in `Store.swift`.
 - `TabPause.swift`: pausing idle tabs. Hooks: `pauseIdle` in `Sleep.swift`, `paused` in `Tab.swift`, `resume()` in `Browser.swift`.
 - `ShortcutKey.swift`: shortcuts on any keyboard layout (`NSEvent.shortcutKey`).
 - `OmniboxField.swift`: the address field that takes focus reliably. Hook: `AddressField` in `Omnibox.swift`.
@@ -48,7 +49,8 @@ The rest are edits and deletions inside upstream's files and can't move: the scr
 3. Injected page scripts add no `wheel` listeners, and nothing reports scroll position to the app on every frame. `HoveredLink.script` ignores `mouseover` while the page scrolls.
 4. A suspended tab (`tab.paused`, `WKWebView.isSuspended`) is never asked to run JavaScript or take a snapshot. WebKit throws if it is. `Extensions.swift` and `Tab.swift` guard this.
 5. Shortcuts match the physical key code as well as the character (`NSEvent.shortcutKey`), so they work on Russian and other non-Latin layouts.
-6. `Updater` never checks Office Commun's feed. Their release has the same bundle id and would replace this build.
+6. `Updater` never checks Office Commun's feed.
+7. The app is Brauz, `dev.aabc.brauz`, with its data in `Application Support/Brauz`, so it never shares settings, cookies or files with Search. `ForkIdentity.swift` copies Search's once, on Brauz's first run. The icon is drawn in `Icon/icon.swift`. Names that only exist inside the code (the Swift package, `Search.sdef`, the keychain label in `Vault.swift`, the test suites) stay Search, which keeps saved passwords readable and syncs with upstream simple.
 
 ## What was measured
 

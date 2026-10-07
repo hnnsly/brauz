@@ -83,7 +83,7 @@ enum Store {
     /// differ from stores made by identifier in how long extension workers
     /// are let live.
     static var ownContainer: Bool {
-        (Bundle.main.bundleIdentifier ?? "") != "com.officecommun.search"
+        (Bundle.main.bundleIdentifier ?? "") != ForkIdentity.bundleID
     }
 
     /// The fixed identifiers of a test world's WebKit stores: 1 for websites,
@@ -106,9 +106,10 @@ enum Store {
     /// — moves to the new name the first time the new name runs, and the
     /// settings are copied across. Nothing is left to be lost.
     static let folder: URL = {
+        _ = ForkIdentity.adopted
         let support = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let home = support.appendingPathComponent(world.map { "Search (\($0))" } ?? "Search", isDirectory: true)
+        let home = support.appendingPathComponent(world.map { "Search (\($0))" } ?? ForkIdentity.folderName, isDirectory: true)
         if !testing {
             let old = support.appendingPathComponent("Office Browser", isDirectory: true)
             let files = FileManager.default
@@ -141,6 +142,7 @@ enum Store {
     /// where the tabs go must not change yours.
     static let settings: UserDefaults = {
         guard testing else {
+            _ = ForkIdentity.adopted
             carryOver(into: .standard)
             return .standard
         }
