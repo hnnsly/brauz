@@ -373,8 +373,9 @@ struct AddressField: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(browser: browser) }
 
-    func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField()
+    func makeNSView(context: Context) -> OmniboxTextField {
+        let field = OmniboxTextField()
+        field.coordinator = context.coordinator
         field.delegate = context.coordinator
         field.isBordered = false
         field.drawsBackground = false
@@ -399,7 +400,7 @@ struct AddressField: NSViewRepresentable {
         return field
     }
 
-    func updateNSView(_ field: NSTextField, context: Context) {
+    func updateNSView(_ field: OmniboxTextField, context: Context) {
         let coordinator = context.coordinator
         coordinator.browser = browser
 
@@ -419,25 +420,7 @@ struct AddressField: NSViewRepresentable {
         }
 
         if coordinator.answered != browser.focusRequest {
-            coordinator.answered = browser.focusRequest
-            DispatchQueue.main.async {
-                field.window?.makeFirstResponder(field)
-                guard let editor = field.currentEditor() as? NSTextView else { return }
-                // The system paints selected text as a block of accent colour,
-                // which over this pale field is the loudest thing in the
-                // window. A tenth of the ink says "selected" quietly enough.
-                editor.selectedTextAttributes = [
-                    .backgroundColor: NSColor(Palette.ink.opacity(0.12)),
-                    .foregroundColor: Palette.NS.ink,
-                ]
-                // A draft come back to its blank tab is carried on, not typed
-                // over: the caret after it. An address ⌘L raises is selected whole.
-                if browser.active?.isBlank == true, !browser.typed.isEmpty {
-                    coordinator.select(from: browser.typed.count, in: field)
-                } else {
-                    editor.selectAll(nil)
-                }
-            }
+            field.requestAppKitFocus(browser.focusRequest)
         }
     }
 
