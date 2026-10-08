@@ -8,6 +8,9 @@ build/
 # Python's bytecode cache, left in Tests/ by the probe scripts.
 __pycache__/
 
+# The working issue list, kept on this Mac only (see CLAUDE.md).
+issues/
+
 # Signing material that's tied to one Apple Developer account and should
 # never be committed, even though the scripts happily run without it.
 *.provisionprofile

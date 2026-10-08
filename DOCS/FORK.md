@@ -40,6 +40,7 @@ The fork's own files:
 - `ShortcutKey.swift`: shortcuts on any keyboard layout (`NSEvent.shortcutKey`).
 - `OmniboxField.swift`: the address field that takes focus reliably. Hook: `AddressField` in `Omnibox.swift`.
 - `LittleExtras.swift`: the small window's address field, keys and placement. Hooks: a few lines in `Little.swift`.
+- `CLAUDE.md`: how work on the fork is done with Claude Code, and the local issue list it keeps in `issues/` (gitignored).
 
 The rest are edits and deletions inside upstream's files and can't move: the scrolling changes in `Tab.swift`, `Stage.swift`, `Swipe.swift` and `StatusLine.swift`, and the removed reading fill.
 
