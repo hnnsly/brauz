@@ -32,6 +32,10 @@ final class LittleWindow: NSObject, NSWindowDelegate {
         tab.go(to: url)
         let little = LittleWindow(tab: tab, browser: browser)
         open.append(little)
+        // A tab to extensions as well, in a window of its own: a password
+        // manager answers the tab its page asked from, and a page WebKit
+        // knows no tab for gets no answer at all.
+        if #available(macOS 15.4, *) { Extensions.shared.opened(little) }
         little.position()
         // Never a test run's in front: a probe started hidden stays off every screen.
         guard front, !Store.testing else { return }
@@ -49,6 +53,11 @@ final class LittleWindow: NSObject, NSWindowDelegate {
     static func owning(_ window: NSWindow?) -> LittleWindow? {
         guard let window else { return nil }
         return open.first { $0.window === window }
+    }
+
+    /// The small window a tab is the page of, if it is one's.
+    static func holding(_ tab: Tab) -> LittleWindow? {
+        open.first { $0.tab === tab }
     }
 
     private init(tab: Tab, browser: Browser) {
@@ -91,6 +100,8 @@ final class LittleWindow: NSObject, NSWindowDelegate {
         // Into the window in front, whichever that is now.
         guard let browser = Browsers.front ?? browser else { return }
         kept = true
+        // Moved, as extensions have it, not closed and opened again.
+        if #available(macOS 15.4, *) { Extensions.shared.keeping(self) }
         // As a tab moved from another window is: this window's delegate,
         // and this window's space, with its sign-ins.
         browser.receive(tab)
@@ -102,6 +113,7 @@ final class LittleWindow: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         saveFrame()
         if !kept { tab.close() }
+        if #available(macOS 15.4, *) { Extensions.shared.closed(self) }
         LittleWindow.open.removeAll { $0 === self }
     }
 }

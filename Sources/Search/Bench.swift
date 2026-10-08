@@ -2234,6 +2234,7 @@ final class Bench {
             answer([
                 "littles": LittleWindow.all.map { $0.tab.address?.absoluteString ?? "" },
                 "failures": LittleWindow.all.map { $0.tab.failure ?? "" },
+                "littleIDs": LittleWindow.all.map { Bench.short($0.tab) },
                 "tabs": browser.tabs.map { ($0.pin != nil ? "PIN " : "") + ($0.address?.host() ?? "blank") },
                 "active": browser.active?.address?.host() ?? "",
             ])
@@ -2913,7 +2914,9 @@ final class Bench {
     /// `window.open` carries no flask and would be out of reach otherwise.
     private func find(_ request: [String: Any], in browser: Browser) -> Tab? {
         guard let ref = (request["id"] as? String)?.lowercased(), !ref.isEmpty else { return nil }
-        return browser.tabs.first { (Store.testing || $0.bench) && $0.id.uuidString.lowercased().hasPrefix(ref) }
+        // A small window's page too, on a test run (see the little command).
+        let littles = Store.testing ? LittleWindow.all.map(\.tab) : []
+        return (browser.tabs + littles).first { (Store.testing || $0.bench) && $0.id.uuidString.lowercased().hasPrefix(ref) }
     }
 
     private func missing(_ request: [String: Any]) -> [String: Any] {
