@@ -150,18 +150,10 @@ extension Browser {
     /// the frame it was right-clicked in (idea 179).
     func imageData(at url: URL, in tab: Tab) async -> Data? {
         guard url.scheme?.lowercased() == "blob" else {
-            // Read as it comes, and let go past the limit.
-            guard let (bytes, response) = try? await Browser.fetcher.bytes(from: url),
+            guard let (data, response) = try? await Browser.fetcher.data(from: url),
                   (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? true,
-                  response.expectedContentLength <= Int64(Browser.largestImage)
+                  data.count <= Browser.largestImage
             else { return nil }
-            var data = Data()
-            do {
-                for try await byte in bytes {
-                    data.append(byte)
-                    if data.count > Browser.largestImage { return nil }
-                }
-            } catch { return nil }
             return data
         }
         guard let web = tab.built else { return nil }
