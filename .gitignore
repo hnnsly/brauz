@@ -16,3 +16,5 @@ issues/
 *.provisionprofile
 *.p12
 *.mobileprovision
+
+Icon/*.png
