@@ -349,6 +349,18 @@ final class ExtensionPopup: NSObject, WKUIDelegate, WKNavigationDelegate, NSPopo
         return nil
     }
 
+    /// Asked before any close, ours (performClose) or a click outside: the
+    /// page comes out now, while the popover's window still hands out the
+    /// browser window's undo manager. Typing in the popup put its edits on
+    /// the browser's stack, and WebKit takes them off only as the page
+    /// leaves its window; once closing has begun the popover's window
+    /// answers with an undo manager of its own, the edits stayed, and ⌘Z in
+    /// the browser went to the freed page.
+    func popoverShouldClose(_ popover: NSPopover) -> Bool {
+        popover.contentViewController?.view.subviews.forEach { $0.removeFromSuperview() }
+        return true
+    }
+
     /// The click being handled, not the live mouse state: AppKit can close
     /// the popover on mouse-up, when no button is pressed any more. The
     /// event also keeps its location if the pointer has since moved.
