@@ -361,6 +361,13 @@ extension Browser {
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         guard let tab = tab(for: webView) else { return }
         dropQuestions(for: tab.id)
+        // A paused page stays suspended once its process is gone: WebKit
+        // won't resume it, and throws on any load into it. So its view goes
+        // too, as in sleep, and the tab comes back on a new one.
+        if tab.paused {
+            tab.sleep(picture: tab.picture)
+            return
+        }
         // In front of you: straight back, a reload beats a white page with a
         // button on it. Behind another tab: the moment you come back to it.
         if tab.id == activeID, !tab.isBlank {

@@ -877,6 +877,8 @@ final class Tab: ObservableObject, Identifiable {
     func pickingFailed(_ reason: String) { onPickTrouble?(self, reason) }
 
     func go(to url: URL) {
+        // An extension may send a tab that is out of sight, and paused.
+        resume()
         // Judged by the page it shows, not by how it was made: a tab an
         // extension's page opened with window.open is built from that
         // extension's configuration too. A tab with no page yet was just
@@ -1221,6 +1223,8 @@ final class Tab: ObservableObject, Identifiable {
         // A pin put down with ⌘W has no view left to reload; waking it is
         // the reload.
         guard !wake() else { return }
+        // An extension may reload a tab that is out of sight, and paused.
+        resume()
         reader = false
         // A file is read again with the folder it may read (see open).
         if let address, hollow || address.isFileURL {
@@ -1231,11 +1235,20 @@ final class Tab: ObservableObject, Identifiable {
             web.reload()
         }
     }
-    func stop() { web.stopLoading() }
+    func stop() {
+        guard !paused else { return }
+        web.stopLoading()
+    }
     /// Straight through, every time. A page that has to be fetched again is
     /// fetched again — nothing is kept behind to make that look otherwise.
-    func back() { web.goBack() }
-    func forward() { web.goForward() }
+    func back() {
+        resume()
+        web.goBack()
+    }
+    func forward() {
+        resume()
+        web.goForward()
+    }
 
     /// Called when the tab is thrown away. Without it the view keeps running
     /// whatever the page left behind — timers, video, sockets.
@@ -1268,7 +1281,8 @@ final class Tab: ObservableObject, Identifiable {
         web.onKeys = nil
         web.searchName = nil
         web.onSearch = nil
-        web.stopLoading()
+        // A suspended page has nothing loading, and WebKit throws if asked.
+        if !web.isSuspended { web.stopLoading() }
         web.navigationDelegate = nil
         web.uiDelegate = nil
         web.removeFromSuperview()
@@ -1400,6 +1414,9 @@ final class MiddleRelay: NSObject, WKScriptMessageHandler {
 
 /// A web view that reads the two-finger swipe for itself.
 final class PageView: WKWebView {
+    /// Suspended by Tab.pause; see `isSuspended`.
+    var suspended = false
+
     /// The page's own right-click menu. WebKit puts extensions' items for the
     /// page in it itself; Search adding them again showed each one twice.
     override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {

@@ -55,8 +55,9 @@ extension Tab {
         guard !paused, let web = built else { return }
         let set = NSSelectorFromString("_suspendPage:")
         guard web.responds(to: set) else { return }
-        typealias Suspend = @convention(c) (AnyObject, Selector, @convention(block) () -> Void) -> Void
-        unsafeBitCast(web.method(for: set), to: Suspend.self)(web, set, {})
+        typealias Suspend = @convention(c) (AnyObject, Selector, @escaping @convention(block) (Bool) -> Void) -> Void
+        unsafeBitCast(web.method(for: set), to: Suspend.self)(web, set, { _ in })
+        web.suspended = true
         paused = true
     }
 
@@ -65,18 +66,17 @@ extension Tab {
         guard paused, let web = built else { return }
         let set = NSSelectorFromString("_resumePage:")
         guard web.responds(to: set) else { return }
-        typealias Resume = @convention(c) (AnyObject, Selector, @convention(block) () -> Void) -> Void
-        unsafeBitCast(web.method(for: set), to: Resume.self)(web, set, {})
+        typealias Resume = @convention(c) (AnyObject, Selector, @escaping @convention(block) (Bool) -> Void) -> Void
+        unsafeBitCast(web.method(for: set), to: Resume.self)(web, set, { _ in })
+        web.suspended = false
         paused = false
     }
 }
 
 extension WKWebView {
-    /// Whether the page is suspended, when nothing may run in it.
-    var isSuspended: Bool {
-        let get = NSSelectorFromString("_isSuspended")
-        guard responds(to: get) else { return false }
-        typealias Getter = @convention(c) (AnyObject, Selector) -> Bool
-        return unsafeBitCast(method(for: get), to: Getter.self)(self, get)
-    }
+    /// Whether the page is suspended, when nothing may run in it: WebKit
+    /// throws on loading, reloading, stopping or running script. Kept by the
+    /// view itself (see Tab.pause), since WebKit's `_isSuspended` answers for
+    /// the page's process, not the page.
+    var isSuspended: Bool { (self as? PageView)?.suspended ?? false }
 }
