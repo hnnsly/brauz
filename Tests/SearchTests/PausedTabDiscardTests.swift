@@ -82,6 +82,11 @@ final class PausedTabDiscardTests: XCTestCase {
         XCTAssertFalse(tab.paused)
     }
 
+    func testRevivingPausedTabDoesNotThrow() throws {
+        let tab = try pausedTab()
+        tab.revive()
+    }
+
     private func pausedTab() throws -> BrowserTab {
         let tab = BrowserTab()
         tab.delegate = navDelegate

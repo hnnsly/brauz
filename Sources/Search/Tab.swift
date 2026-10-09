@@ -1141,6 +1141,7 @@ final class Tab: ObservableObject, Identifiable {
     /// Asked anything at all, the page answers with one particular error, and
     /// the answer to that is to load it again.
     func revive() {
+        guard !paused, !web.isSuspended else { return }
         if stale {
             stale = false
             recoverFromCrash()

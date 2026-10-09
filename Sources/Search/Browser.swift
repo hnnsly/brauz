@@ -2337,6 +2337,7 @@ final class Browser: NSObject, ObservableObject {
         removeEmptyGroup(oldGroup)
         focusPane(dragged)
         for pane in [left, right] where !pane.isBlank {
+            pane.resume()
             if !pane.wake() { pane.revive() }
         }
         rememberSession()
@@ -2474,6 +2475,7 @@ final class Browser: NSObject, ObservableObject {
         activeID = tab.id
         editing = false
         typed = ""
+        tab.resume()
         if !tab.wake() { tab.revive() }
         rememberSession()
     }
