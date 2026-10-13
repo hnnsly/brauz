@@ -41,20 +41,45 @@ What changed and why this way. Files touched.
 
 ## Guarded by
 The test that fails if it comes back.
+
+## Acceptance
+(feature) One observable check per line.
+
+## Files
+Which worker owns which files.
+
+## Test by hand
+Written at the end: how to start, one "do X, expect Y" per check, what no test covered.
 ```
+
+`status: idea` marks a thought that was grilled and saved without code.
 
 Write findings into the file as they come, not at the end: hypotheses ruled out, measurements, decisions the user made. A fixed issue keeps its file with `status: fixed`; `grep -l "status: open" issues/*` is the open work.
 
 ## How we work
 
-The user plans with you; you run the work. For each issue:
+The user plans with you; you run the work. `/ship <text>` runs the whole path below for a new issue, with the facts in `## Ship`. For each issue:
 
 1. Write the issue file with what the user reported, then get a red loop before theorising about the cause.
 2. Show the user the ranked hypotheses and the plan; start the fix once they agree.
-3. Hand the bounded parts to subagents: builds, test runs, audits of call sites, mechanical edits. The issue file is the brief's context: point the subagent at it, then name the exact files, the change, the done-check and the report format. Diagnosis, decisions and the final review stay with you.
+3. Hand the bounded parts to subagents, `model: haiku` for mechanical edits, test runs and call-site audits, `model: sonnet` for changes across several files, each worker owning files no other worker touches. The issue file is the brief's context: point the subagent at it, then name the exact files, the change, the done-check and the report format. Diagnosis, decisions and the final review stay with you.
 4. Check every subagent report against the diff or the test output before telling the user it's done.
 5. Update the issue file, then commit.
 
 ## Commits
 
 One topical commit per fix, with its tests. The subject names the area and what changed, as a sentence: `Tabs: a paused tab sleeps and closes without crashing`. The body says what was wrong. A new fork-only file is added to the list in `DOCS/FORK.md` in the same commit.
+
+## Ship
+
+`/ship <text>` runs an issue from intake to PR. Its facts:
+
+- **Issues:** `issues/NNNN-slug.md`, gitignored, template in "Issues" above.
+- **Decisions:** the issue file; a rule every later change depends on goes into the Rules in `DOCS/FORK.md`.
+- **Red loop:** `DEVELOPER_DIR=… swift test --filter <Suite>.<test>`, or `python3 Tests/<name>.py` for what XCTest can't host. `DEVELOPER_DIR` is the path in "Building and testing".
+- **Test:** `swift test`, with `DEVELOPER_DIR`.
+- **Build:** `swift build -c release`, with `DEVELOPER_DIR`.
+- **Worker rules:** the Rules section of `DOCS/FORK.md`.
+- **Extra checks:** a new fork-only file joins the list in `DOCS/FORK.md`.
+- **PR:** `origin` → `main`. Never `upstream` (`driceroland/Search`).
+- **Start the app:** `./build.sh`, then `open build/Brauz.app`; `./fresh.sh again` for the test world. `/Applications/Brauz.app` stays untouched.
