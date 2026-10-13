@@ -10,7 +10,7 @@ What Brauz changes:
 - Shortcuts work on any keyboard layout, Cyrillic included.
 - Little Window has its own address field and shortcuts, remembers its position, and shows extensions its page as a tab.
 
-Get `Brauz.dmg` (Apple Silicon) or `Brauz-Intel.dmg` from the [releases page](https://github.com/hnnsly/Search/releases). It needs macOS 14 or later, and Chrome extensions need 15.4.
+Get `Brauz.dmg` from the [releases page](https://github.com/hnnsly/Search/releases). It's for Apple Silicon Macs only, needs macOS 14 or later, and Chrome extensions need 15.4.
 
 To build it, run `./build.sh`. It writes `build/Brauz.app`, ad-hoc signed, and needs Xcode 16 (Swift 6). Without Xcode the Dock icon goes black on black in dark mode. `swift build` runs the app from the SwiftPM binary, `swift build -c release` checks the release build, and `swift test` runs the XCTest suite in `Tests/SearchTests`. `python3 Tests/<name>.py` drives a hidden Brauz from `build/` through the bench socket, so build first. Search's readme describes `./bench`. A build of your own keeps its passwords apart from a release's, because the keychain tells them apart by signature.
 

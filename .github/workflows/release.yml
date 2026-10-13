@@ -1,5 +1,5 @@
 # Pushing a 'v*' tag triggers this workflow to build and publish Brauz disk images.
-# Builds both Apple Silicon and Intel release DMGs without notarization.
+# Builds an Apple Silicon release DMG without notarization; there is no Intel build.
 # Repository secrets (BRAUZ_CERT_P12 and BRAUZ_CERT_PASSWORD) are described in DOCS/FORK.md.
 
 name: Release
@@ -57,25 +57,12 @@ jobs:
           SEARCH_SIGN_IDENTITY: Brauz Signing
         run: ./build.sh release dmg
 
-      - name: Build Intel disk image
-        env:
-          SEARCH_SIGN_IDENTITY: Brauz Signing
-        run: SEARCH_ARCH=x86_64 ./build.sh release dmg
-
-      - name: Verify builds
+      - name: Verify build
         run: |
           codesign --verify --deep --strict build/Brauz.app
-          codesign --verify --deep --strict build/intel/Brauz.app
           codesign -d -r- build/Brauz.app 2>&1 | grep -q 'certificate root'
           test "$(lipo -archs build/Brauz.app/Contents/MacOS/Brauz)" = "arm64"
-          test "$(lipo -archs build/intel/Brauz.app/Contents/MacOS/Brauz)" = "x86_64"
           test -f build/Brauz.app/Contents/Resources/Assets.car
-
-      - name: Collect disk images
-        run: |
-          mkdir -p dist
-          cp build/Brauz.dmg dist/Brauz.dmg
-          cp build/intel/Brauz.dmg dist/Brauz-Intel.dmg
 
       - name: Publish GitHub release
         env:
@@ -87,12 +74,9 @@ jobs:
           cp "$RUNNER_TEMP/whats-new.md" "$RUNNER_TEMP/notes.md"
           cat << 'EOF' >> "$RUNNER_TEMP/notes.md"
 
-          ## Which file
+          ## Which Mac
 
-          - Brauz.dmg for Macs with Apple Silicon (M1 and later)
-          - Brauz-Intel.dmg for Intel Macs
-
-          Needs macOS 14 or later.
+          Brauz.dmg is for Macs with Apple Silicon (M1 and later), on macOS 14 or later. There is no Intel build.
 
           ## Install
 
@@ -111,7 +95,7 @@ jobs:
           Brauz is a fork of Search by Office Commun (https://github.com/driceroland/Search).
           EOF
 
-          gh release create "$GITHUB_REF_NAME" dist/Brauz.dmg dist/Brauz-Intel.dmg \
+          gh release create "$GITHUB_REF_NAME" build/Brauz.dmg \
             --title "Brauz $VERSION (build $BUILD)" \
             --notes-file "$RUNNER_TEMP/notes.md"
 

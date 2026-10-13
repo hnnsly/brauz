@@ -6,6 +6,8 @@ Each section is headed by the tag it ships in, and the release workflow puts tha
 
 ## Unreleased
 
+- Brauz comes for Apple Silicon Macs only. There is no Brauz-Intel.dmg from this release on.
+
 ## v1.0.4-brauz.3
 
 - Coming back to a tab that was paused no longer crashes Brauz. Switching to it, switching spaces with it in view, putting it in Split View, or changing between light and dark could ask the paused page to run a script, and WebKit stopped the app with "The WKWebView is suspended". The tab now wakes before anything asks it something, and its icon is checked again once it is awake.

@@ -68,7 +68,7 @@ A tag starting with `v` builds and publishes a release (`.github/workflows/relea
 git tag v1.0.4-brauz.4 && git push origin main v1.0.4-brauz.4
 ```
 
-GitHub builds `Brauz.dmg` for Apple Silicon and `Brauz-Intel.dmg` for Intel on a `macos-26` runner, signs both, and publishes the release with install steps. Brauz on your friends' Macs sees it within a day. Use the upstream version from `VERSION`, then `-brauz.` and a number that goes up.
+GitHub builds `Brauz.dmg` for Apple Silicon on a `macos-26` runner, signs it, and publishes the release with install steps. There is no Intel build since `v1.0.4-brauz.4`, because it doubled the run. `SEARCH_ARCH=x86_64 ./build.sh release dmg` still makes one by hand. No build cache either: Brauz is one module with no dependencies, so a release compiles it whole every time, and GitHub doesn't share a cache made under one tag with the next tag. Brauz on your friends' Macs sees it within a day. Use the upstream version from `VERSION`, then `-brauz.` and a number that goes up.
 
 The signature is a self-signed certificate, "Brauz Signing", not Apple's. macOS asks once per new version (System Settings › Privacy & Security › Open Anyway), but because every release carries the same certificate, it keeps each Mac's passwords and permissions across updates. It lives in two repository secrets, `BRAUZ_CERT_P12` (the .p12, base64) and `BRAUZ_CERT_PASSWORD`, and in your login keychain, where `build.sh` finds it for local builds. Keep the .p12 and its password somewhere safe: a release signed with a new certificate is a different app to macOS, and everyone is asked for their passwords and permissions again.
 
