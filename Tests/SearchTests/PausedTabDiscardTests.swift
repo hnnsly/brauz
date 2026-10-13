@@ -82,6 +82,17 @@ final class PausedTabDiscardTests: XCTestCase {
         XCTAssertFalse(tab.paused)
     }
 
+    func testRevivingPausedTabDoesNotThrow() throws {
+        let tab = try pausedTab()
+        tab.revive()
+    }
+
+    func testRelookingFaviconsOnPausedTabDoesNotThrow() throws {
+        let tab = try pausedTab()
+        tab.setAddressOptimistically(URL(string: "http://example.com/test")!)
+        Favicons.shared.relook([tab])
+    }
+
     private func pausedTab() throws -> BrowserTab {
         let tab = BrowserTab()
         tab.delegate = navDelegate

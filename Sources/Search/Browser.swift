@@ -1801,7 +1801,8 @@ final class Browser: NSObject, ObservableObject {
                 if !on { linkStatus.dismiss() }
                 for tab in tabs + parkedTabs {
                     tab.arm(hiding: curtain.css(on: curtain.host(of: tab.address)))
-                    tab.built?.evaluateJavaScript(on ? HoveredLink.script : HoveredLink.off, in: nil, in: .defaultClient)
+                    guard let web = tab.built, !web.isSuspended, !tab.paused else { continue }
+                    web.evaluateJavaScript(on ? HoveredLink.script : HoveredLink.off, in: nil, in: .defaultClient)
                 }
             }
             .store(in: &bag)
@@ -2277,6 +2278,7 @@ final class Browser: NSObject, ObservableObject {
         removeEmptyGroup(oldGroup)
         focusPane(dragged)
         for pane in [left, right] where !pane.isBlank {
+            pane.resume()
             if !pane.wake() { pane.revive() }
         }
         rememberSession()
@@ -2414,6 +2416,7 @@ final class Browser: NSObject, ObservableObject {
         activeID = tab.id
         editing = false
         typed = ""
+        tab.resume()
         if !tab.wake() { tab.revive() }
         rememberSession()
     }

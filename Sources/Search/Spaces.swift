@@ -211,6 +211,7 @@ extension Browser {
         if let back = parked.removeValue(forKey: id), !back.tabs.isEmpty {
             showRow(back.tabs, active: back.active, splits: back.splits)
             for tab in tabs where visibleTabIDs.contains(tab.id) {
+                tab.resume()
                 if !tab.wake() { tab.revive() }
             }
         } else {
