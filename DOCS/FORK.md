@@ -20,13 +20,15 @@ git config rerere.enabled true
 ## Syncing with upstream
 
 ```bash
-git fetch upstream
-git rebase upstream/main
-./build.sh
+./sync.sh
 git push --force-with-lease origin main
 ```
 
-The rebase replays the fork's commits on top of the new upstream. Each commit covers one area, so a conflict points at what it was for. When resolving, keep the rules below.
+`sync.sh` fetches upstream and replays the fork's commits on top of it, keeping `CHANGELOG.md` as upstream has it at every commit. Then it runs the tests and the build, and prints the push command; it never pushes itself. Before rebasing it tags the old `main` as `pre-sync-backup`, so `git reset --hard pre-sync-backup` undoes a sync that went wrong.
+
+When a commit doesn't apply, `sync.sh` stops and names the commit and its files. Resolve them, `git add` them, `git rebase --continue`, and run `./sync.sh` again; it picks up at the tests. Each commit covers one area, so a conflict points at what it was for. When resolving, keep the rules below.
+
+Sync often: a week of upstream rarely conflicts, a month can. Every Monday the Upstream workflow (`.github/workflows/upstream.yml`) counts the commits Search has that Brauz hasn't, tries the rebase, and keeps one issue labelled `upstream-sync` up to date with the count and whether the rebase is clean. It closes the issue once `main` has caught up.
 
 Don't use GitHub's "Sync fork" button. Because `main` carries commits upstream doesn't have, it offers to discard them.
 
@@ -42,6 +44,7 @@ The fork's own files:
 - `LittleExtras.swift`: the small window's address field, keys and placement. Hooks: a few lines in `Little.swift`.
 - `CLAUDE.md`: how work on the fork is done with Claude Code, and the local issue list it keeps in `issues/` (gitignored).
 - `DOCS/BRAUZ-CHANGES.md`: what changed in Brauz itself, by release.
+- `sync.sh` and `.github/workflows/upstream.yml`: syncing with upstream, by hand and the weekly check.
 - `.github/workflows/release.yml`: building and publishing a release.
 
 The rest are edits and deletions inside upstream's files and can't move: the scrolling changes in `Tab.swift`, `Stage.swift`, `Swipe.swift` and `StatusLine.swift`, and the removed reading fill.

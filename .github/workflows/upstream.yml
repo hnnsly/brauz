@@ -1,0 +1,141 @@
+# Checks weekly whether upstream (driceroland/Search) has new commits on main.
+# Tests whether the fork's commits rebase cleanly, and opens or updates an issue.
+# Never pushes or changes main.
+
+name: Upstream
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  upstream:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch upstream main
+        run: |
+          git remote add upstream https://github.com/driceroland/Search.git
+          git fetch upstream main
+
+      - name: Check sync status and update issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BEHIND=$(git rev-list --count HEAD..upstream/main)
+
+          gh label create upstream-sync \
+            --color 0E8A16 \
+            --description "Search has commits Brauz hasn't taken" \
+            --force \
+            --repo "$GITHUB_REPOSITORY"
+
+          if [ "$BEHIND" -eq 0 ]; then
+            OPEN_ISSUES=$(gh issue list --repo "$GITHUB_REPOSITORY" --label upstream-sync --state open --json number --jq '.[].number')
+            for num in $OPEN_ISSUES; do
+              gh issue close "$num" --repo "$GITHUB_REPOSITORY" --comment "Brauz is up to date with Search."
+            done
+            exit 0
+          fi
+
+          COMMIT_LIST=$(git log --format='- [%h](https://github.com/driceroland/Search/commit/%H) %s' HEAD..upstream/main)
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          set +e
+          git rebase upstream/main -x 'git checkout upstream/main -- CHANGELOG.md && git commit -q --amend --no-edit --allow-empty'
+          REBASE_EXIT=$?
+
+          REBASE_STATUS="clean"
+          FAIL_COMMIT=""
+          FAIL_FILES=""
+
+          if [ $REBASE_EXIT -ne 0 ]; then
+            while true; do
+              CONFLICTS=$(git diff --name-only --diff-filter=U)
+              if [ "$CONFLICTS" = "CHANGELOG.md" ]; then
+                git checkout upstream/main -- CHANGELOG.md
+                git add CHANGELOG.md
+                GIT_EDITOR=true git rebase --continue
+                CONT_EXIT=$?
+                if [ $CONT_EXIT -eq 0 ]; then
+                  REBASE_STATUS="clean"
+                  break
+                fi
+              else
+                FAIL_COMMIT=$(git log -1 --format='%h %s' REBASE_HEAD 2>/dev/null || echo "unknown")
+                FAIL_FILES=$(git diff --name-only --diff-filter=U | paste -sd, - | sed 's/,/, /g')
+                if [ -z "$FAIL_FILES" ]; then
+                  FAIL_FILES="unknown"
+                fi
+                git rebase --abort
+                REBASE_STATUS="conflict"
+                break
+              fi
+            done
+          fi
+          set -e
+
+          TITLE="Upstream: $BEHIND new commits from Search"
+
+          if [ "$REBASE_STATUS" = "clean" ]; then
+            STATUS_LINE="$BEHIND new commits from Search. Rebase: clean."
+          else
+            STATUS_LINE="$BEHIND new commits from Search. Rebase: stops at $FAIL_COMMIT, conflicts in $FAIL_FILES."
+          fi
+
+          BODY_FILE="${RUNNER_TEMP:-/tmp}/upstream-issue-body.md"
+          {
+            echo "$STATUS_LINE"
+            echo ""
+            if [ "$BEHIND" -le 50 ]; then
+              echo "$COMMIT_LIST"
+            else
+              echo "$COMMIT_LIST" | head -n 50
+              OVER=$((BEHIND - 50))
+              echo "... and $OVER more"
+            fi
+            echo ""
+            echo "Run \`./sync.sh\` on the Mac, then \`git push --force-with-lease origin main\`."
+          } > "$BODY_FILE"
+
+          EXISTING_ISSUE=$(gh issue list \
+            --repo "$GITHUB_REPOSITORY" \
+            --label upstream-sync \
+            --state open \
+            --limit 1 \
+            --json number,title \
+            --jq '.[0] // empty')
+
+          if [ -n "$EXISTING_ISSUE" ]; then
+            ISSUE_NUM=$(echo "$EXISTING_ISSUE" | jq -r '.number')
+            ISSUE_TITLE=$(echo "$EXISTING_ISSUE" | jq -r '.title')
+            OLD_COUNT=$(echo "$ISSUE_TITLE" | grep -oE '[0-9]+' | head -n 1)
+
+            gh issue edit "$ISSUE_NUM" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$TITLE" \
+              --body-file "$BODY_FILE"
+
+            if [ "$OLD_COUNT" != "$BEHIND" ]; then
+              gh issue comment "$ISSUE_NUM" \
+                --repo "$GITHUB_REPOSITORY" \
+                --body "Upstream moved: now $BEHIND new commits."
+            fi
+          else
+            gh issue create \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$TITLE" \
+              --body-file "$BODY_FILE" \
+              --label upstream-sync
+          fi
