@@ -24,6 +24,17 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      # Before the build, so a tag without notes fails in seconds.
+      - name: Take this tag's notes from DOCS/BRAUZ-CHANGES.md
+        run: |
+          awk -v tag="## $GITHUB_REF_NAME" '$0 == tag { on = 1 } on && /^## / && $0 != tag { exit } on' \
+            DOCS/BRAUZ-CHANGES.md | sed "1s/.*/## What's new/" > "$RUNNER_TEMP/whats-new.md"
+          if [ "$(wc -l < "$RUNNER_TEMP/whats-new.md")" -lt 2 ]; then
+            echo "DOCS/BRAUZ-CHANGES.md has no section '## $GITHUB_REF_NAME'" >&2
+            exit 1
+          fi
+          echo >> "$RUNNER_TEMP/whats-new.md"
+
       - name: Import signing certificate
         env:
           BRAUZ_CERT_P12: ${{ secrets.BRAUZ_CERT_P12 }}
@@ -73,7 +84,9 @@ jobs:
           VERSION="$(tr -d '[:space:]' < VERSION)"
           BUILD="$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" build/Brauz.app/Contents/Info.plist)"
 
-          cat << 'EOF' > "$RUNNER_TEMP/notes.md"
+          cp "$RUNNER_TEMP/whats-new.md" "$RUNNER_TEMP/notes.md"
+          cat << 'EOF' >> "$RUNNER_TEMP/notes.md"
+
           ## Which file
 
           - Brauz.dmg for Macs with Apple Silicon (M1 and later)

@@ -41,6 +41,8 @@ The fork's own files:
 - `OmniboxField.swift`: the address field that takes focus reliably. Hook: `AddressField` in `Omnibox.swift`.
 - `LittleExtras.swift`: the small window's address field, keys and placement. Hooks: a few lines in `Little.swift`.
 - `CLAUDE.md`: how work on the fork is done with Claude Code, and the local issue list it keeps in `issues/` (gitignored).
+- `DOCS/BRAUZ-CHANGES.md`: what changed in Brauz itself, by release.
+- `.github/workflows/release.yml`: building and publishing a release.
 
 The rest are edits and deletions inside upstream's files and can't move: the scrolling changes in `Tab.swift`, `Stage.swift`, `Swipe.swift` and `StatusLine.swift`, and the removed reading fill.
 
@@ -53,13 +55,14 @@ The rest are edits and deletions inside upstream's files and can't move: the scr
 5. Shortcuts match the physical key code as well as the character (`NSEvent.shortcutKey`), so they work on Russian and other non-Latin layouts.
 6. `Updater` never checks Office Commun's feed. Brauz looks at its own GitHub releases instead (`BrauzUpdates.swift`), and finds the build number in the release title, so the title keeps the form `Brauz 1.0.4 (build 202610071500)`.
 7. The app is Brauz, `dev.aabc.brauz`, with its data in `Application Support/Brauz`, so it never shares settings, cookies or files with Search. `ForkIdentity.swift` copies Search's once, on Brauz's first run. The icon is drawn in `Icon/icon.swift`; its Dark and Tinted versions need Xcode installed somewhere (build.sh finds it with Spotlight), and without it the Dock darkens the light icon to black on black. Names that only exist inside the code (the Swift package, `Search.sdef`, the keychain label in `Vault.swift`, the test suites) stay Search, which keeps saved passwords readable and syncs with upstream simple.
+8. The fork's commits never change `CHANGELOG.md`, which is upstream's and conflicted on almost every sync while they did. Brauz's own changes go in `DOCS/BRAUZ-CHANGES.md`, under `## Unreleased`.
 
 ## Releasing
 
-A tag starting with `v` builds and publishes a release (`.github/workflows/release.yml`):
+A tag starting with `v` builds and publishes a release (`.github/workflows/release.yml`). First rename `## Unreleased` in `DOCS/BRAUZ-CHANGES.md` to the tag, add a fresh empty `## Unreleased` above it, and commit. The workflow puts that section at the top of the release notes, and stops before building when the tag has no section.
 
 ```bash
-git tag v1.0.4-brauz.2 && git push origin v1.0.4-brauz.2
+git tag v1.0.4-brauz.4 && git push origin main v1.0.4-brauz.4
 ```
 
 GitHub builds `Brauz.dmg` for Apple Silicon and `Brauz-Intel.dmg` for Intel on a `macos-26` runner, signs both, and publishes the release with install steps. Brauz on your friends' Macs sees it within a day. Use the upstream version from `VERSION`, then `-brauz.` and a number that goes up.
