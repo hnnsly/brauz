@@ -70,6 +70,7 @@ extension Tab {
         unsafeBitCast(web.method(for: set), to: Resume.self)(web, set, { _ in })
         web.suspended = false
         paused = false
+        Favicons.shared.fetch(for: self)
     }
 }
 
