@@ -4381,6 +4381,10 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         for action: WKNavigationAction,
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
+        if let little = LittleWindow.all.first(where: { $0.tab.built === webView }) {
+            if let url = action.request.url { little.tab.go(to: url) }
+            return nil
+        }
         let from = tab(for: webView)?.id ?? activeID
         // WebKit's copy of the opener's configuration still holds the
         // opener's user content controller — its scripts and its message
@@ -4806,6 +4810,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         guard let tab = tab(for: webView) else {
             // A small window's page came: what failed before it is over.
             littleTab(for: webView)?.failure = nil
+            littleTab(for: webView)?.didCommit()
             return
         }
         tab.didCommit()
@@ -4913,7 +4918,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
     /// still loading when you went to another space finishes there, and
     /// still goes into History with its icon.
     func anyTab(for webView: WKWebView) -> Tab? {
-        tab(for: webView) ?? parkedTabs.first { $0.built === webView }
+        tab(for: webView) ?? parkedTabs.first { $0.built === webView } ?? littleTab(for: webView)
     }
 }
 

@@ -446,6 +446,12 @@ final class Extensions: NSObject, ObservableObject {
         controller.didFocusWindow(window(of: browser))
     }
 
+    func focused(_ little: LittleWindow) {
+        let key = ObjectIdentifier(little)
+        guard windows[key] != nil else { return }
+        controller.didFocusWindow(window(of: little))
+    }
+
     private func follow(_ tabs: [Tab], in browser: Browser) {
         let key = ObjectIdentifier(browser)
         let order = orders[key] ?? []
