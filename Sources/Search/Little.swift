@@ -29,17 +29,22 @@ final class LittleWindow: NSObject, NSWindowDelegate {
     static func show(_ url: URL, for browser: Browser, front: Bool = true) {
         let tab = Tab(configuration: Web.configuration(space: browser.spaceID))
         browser.prepare(tab)
-        tab.go(to: url)
         let little = LittleWindow(tab: tab, browser: browser)
         open.append(little)
-        // A tab to extensions as well, in a window of its own: a password
-        // manager answers the tab its page asked from, and a page WebKit
-        // knows no tab for gets no answer at all.
-        if #available(macOS 15.4, *) { Extensions.shared.opened(little) }
+        let load = {
+            tab.go(to: url)
+            if #available(macOS 15.4, *) { Extensions.shared.opened(little) }
+        }
+        if #available(macOS 15.4, *), Extensions.shared.starting {
+            Extensions.shared.whenStarted(within: 1.5, load)
+        } else {
+            load()
+        }
         little.position()
         // Never a test run's in front: a probe started hidden stays off every screen.
         guard front, !Store.testing else { return }
         little.window.makeKeyAndOrderFront(nil)
+        if #available(macOS 15.4, *) { Extensions.shared.focused(little) }
         if #available(macOS 14, *) { NSApp.activate() } else { NSApp.activate(ignoringOtherApps: true) }
     }
 
@@ -110,6 +115,10 @@ final class LittleWindow: NSObject, NSWindowDelegate {
             .makeKeyAndOrderFront(nil)
     }
 
+    func windowDidBecomeKey(_ notification: Notification) {
+        if #available(macOS 15.4, *) { Extensions.shared.focused(self) }
+    }
+
     func windowWillClose(_ notification: Notification) {
         saveFrame()
         if !kept { tab.close() }
@@ -131,6 +140,10 @@ struct LittleView: View {
             HStack(spacing: 10) {
                 // Room for the window's own buttons, which sit on this line.
                 Spacer().frame(width: 64)
+                if tab.canGoBack {
+                    Door(icon: "chevron.left", help: "Back   ⌘[") { tab.back() }
+                        .transition(.opacity)
+                }
                 Spacer(minLength: 0)
                 LittleTitle(little: little, site: site)
                 Spacer(minLength: 0)
@@ -141,6 +154,7 @@ struct LittleView: View {
                     Spacer().frame(width: 64)
                 }
             }
+            .animation(Motion.quick, value: tab.canGoBack)
             .padding(.horizontal, 10)
             .frame(height: 34)
             ZStack {
