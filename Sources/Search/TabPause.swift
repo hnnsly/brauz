@@ -34,11 +34,13 @@ extension Browser {
         for tab in idle { pause(tab) }
     }
 
-    /// Pictured first, for when it is put to sleep later, and never with
-    /// something typed in it. Looked at again at each step, as sleep is.
+    /// Pictured first, for when it is put to sleep later. Looked at again at
+    /// each step, as sleep is.
     func pause(_ tab: Tab) {
-        tab.unsaved { [weak self, weak tab] typed in
-            guard let self, let tab, !typed, self.awake(because: tab, forSleep: false) == nil else { return }
+        guard awake(because: tab, forSleep: false) == nil else { return }
+        if tab.picture != nil {
+            tab.pause()
+        } else {
             tab.snapshot { [weak self, weak tab] picture in
                 guard let self, let tab, self.awake(because: tab, forSleep: false) == nil else { return }
                 tab.picture = picture
