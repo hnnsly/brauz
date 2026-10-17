@@ -63,15 +63,22 @@ enum Web {
         return os >= 26 ? "\(os).0" : "\(os + 3).0"
     }
 
-    /// One pool for every tab. The property is deprecated and said to do
-    /// nothing now, but a configuration without it gets a pool of its own
-    /// when its view is made — so every new tab started a web process from
-    /// cold, fonts registered and all, on the main thread, before its page
-    /// could begin: 41 to 59 ms from a bookmark or Return to the load
-    /// starting, the window stuck meanwhile. Sharing one lets WebKit have
-    /// the next process ready: 9 to 10 ms, for the same memory and the same
-    /// number of processes (measured with ./bench bookmark URL new, 24 Sep 2026).
-    static let pool = WKProcessPool()
+    /// One pool for every tab. Configured with WebKit's web process cache and
+    /// page cache enabled, matching Safari's instant swipe-back restoration.
+    static let pool: WKProcessPool = {
+        if let configClass = NSClassFromString("_WKProcessPoolConfiguration") as? NSObject.Type {
+            let poolConfig = configClass.init()
+            poolConfig.setValue(true, forKey: "usesWebProcessCache")
+            poolConfig.setValue(true, forKey: "pageCacheEnabled")
+            let pool = WKProcessPool()
+            let sel = NSSelectorFromString("_initWithConfiguration:")
+            if pool.responds(to: sel) {
+                typealias InitMethod = @convention(c) (AnyObject, Selector, AnyObject) -> WKProcessPool
+                return unsafeBitCast(pool.method(for: sel), to: InitMethod.self)(pool, sel, poolConfig)
+            }
+        }
+        return WKProcessPool()
+    }()
 
     /// `space`: the space the tab belongs to, when it is not the one on
     /// screen — a parked row made ahead of time (see Spaces.swift).
@@ -89,6 +96,11 @@ enum Web {
         // a private tab's is left without, and a page there is refused.
         if !shy { let kept = config.websiteDataStore; MainActor.assumeIsolated { SiteNotifications.shared.attach(kept) } }
         config.processPool = Web.pool
+        let uiProcessLoading = NSSelectorFromString("_setUseUIProcessForBackForwardItemLoading:")
+        if config.preferences.responds(to: uiProcessLoading) {
+            typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+            unsafeBitCast(config.preferences.method(for: uiProcessLoading), to: Setter.self)(config.preferences, uiProcessLoading, true)
+        }
         // A test run's pretend camera and microphone (see ExtensionCapture).
         if #available(macOS 15.4, *), Store.testing { ExtensionCapture.mockDevices(config.preferences) }
         // Chrome extensions see every page but a private one, unless Settings

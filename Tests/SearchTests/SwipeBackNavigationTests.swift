@@ -75,4 +75,18 @@ final class SwipeBackNavigationTests: XCTestCase {
             "Back/forward navigation must not re-arm and wipe user scripts on the controller"
         )
     }
+
+    func testProcessPoolAndPreferencesEnableWebProcessCacheAndFastBackForwardLoading() throws {
+        let pool = Web.pool
+        if let poolConfig = pool.value(forKey: "_configuration") as? NSObject {
+            let usesWebProcessCache = poolConfig.value(forKey: "usesWebProcessCache") as? Bool
+            XCTAssertEqual(usesWebProcessCache, true, "WebKit must keep Web Process Cache enabled like Safari")
+            let pageCacheEnabled = poolConfig.value(forKey: "pageCacheEnabled") as? Bool
+            XCTAssertEqual(pageCacheEnabled, true, "WebKit must keep Page Cache enabled")
+        }
+
+        let config = Web.configuration()
+        let uiLoading = config.preferences.value(forKey: "_useUIProcessForBackForwardItemLoading") as? Bool
+        XCTAssertEqual(uiLoading, true, "UI process back forward item loading must be enabled")
+    }
 }
