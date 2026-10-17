@@ -28,6 +28,11 @@ extension Browser {
         return set > 0 ? set : 15 * 60
     }
 
+    static var forceSleepAfter: TimeInterval {
+        let set = Store.settings.double(forKey: "sleep.forceAfter")
+        return set > 0 ? set : 60 * 60
+    }
+
     /// Started once, at launch.
     func watchForSleep() {
         let every = min(30, max(5, Browser.pauseAfter / 4))
@@ -54,12 +59,16 @@ extension Browser {
     func sleepIdle(within given: TimeInterval? = nil) {
         guard prefs.sleepsTabs else { return }
         let wait = given ?? Browser.sleepAfter
+        let forceWait = Browser.forceSleepAfter
         let now = Date()
         // The rows of the other spaces too: parked is not the same as used.
         let idle = (tabs + parkedTabs)
             .filter { now.timeIntervalSince($0.touched) >= wait && awake(because: $0) == nil }
             .sorted { $0.touched < $1.touched }
-        for tab in idle { self.sleep(tab) }
+        for tab in idle {
+            let force = now.timeIntervalSince(tab.touched) >= forceWait
+            self.sleep(tab, force: force)
+        }
         pauseIdle(within: given)
     }
 
@@ -96,15 +105,24 @@ extension Browser {
     /// Asks the page whether it holds anything typed, pictures it, then lets
     /// it go — looking again at each step, since each takes a moment and you
     /// may have gone back to the tab in the meantime.
-    func sleep(_ tab: Tab, done: ((String) -> Void)? = nil) {
+    func sleep(_ tab: Tab, force: Bool = false, done: ((String) -> Void)? = nil) {
         if let reason = awake(because: tab) {
             done?(reason)
             return
         }
         // Paused, it was pictured and checked for typing on the way.
-        if tab.paused {
+        if tab.paused && (force || tab.picture != nil) {
             tab.sleep(picture: tab.picture)
             done?("asleep")
+            return
+        }
+        if force {
+            tab.snapshot { [weak self, weak tab] picture in
+                guard let self, let tab else { return }
+                if let reason = self.awake(because: tab) { done?(reason); return }
+                tab.sleep(picture: picture ?? tab.picture)
+                done?("asleep")
+            }
             return
         }
         tab.unsaved { [weak self, weak tab] typed in

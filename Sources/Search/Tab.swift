@@ -1208,7 +1208,7 @@ final class Tab: ObservableObject, Identifiable {
         icon = nil
     }
 
-    func touch() { touched = Date() }
+    func touch(at date: Date = Date()) { touched = date }
 
     /// True when the web view holds nothing — never loaded, or emptied —
     /// while the tab still names a page. The white page, in other words.
@@ -1287,6 +1287,11 @@ final class Tab: ObservableObject, Identifiable {
         web.navigationDelegate = nil
         web.uiDelegate = nil
         web.removeFromSuperview()
+        let closeSelector = NSSelectorFromString("_close")
+        if web.responds(to: closeSelector) {
+            typealias CloseMethod = @convention(c) (AnyObject, Selector) -> Void
+            unsafeBitCast(web.method(for: closeSelector), to: CloseMethod.self)(web, closeSelector)
+        }
     }
 }
 

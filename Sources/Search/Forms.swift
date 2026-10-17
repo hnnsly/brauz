@@ -184,6 +184,7 @@ final class FormRelay: NSObject, WKScriptMessageHandler {
           } else if (tag === 'input') {
             var kind = (el.type || 'text').toLowerCase();
             if (['text', 'email', 'url', 'tel', 'number'].indexOf(kind) < 0) continue;
+            if (kind === 'search' || el.name === 'q' || el.name === 'search' || el.name === 'query' || (el.closest && el.closest('form[role="search"]'))) continue;
             if (el.value.trim() && el.value !== el.defaultValue) return true;
           } else if (el.isContentEditable) {
             if ((el.textContent || '').trim()) return true;
