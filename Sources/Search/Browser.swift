@@ -4265,6 +4265,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         // The next document gets this site's stylesheet of hidden things,
         // decided here because here is the last moment before it loads.
         if action.targetFrame?.isMainFrame ?? true, action.navigationType != .backForward, let tab = tab(for: webView) {
+            saveBackForwardSnapshot(for: webView)
             let host = curtain.host(of: url)
             tab.arm(hiding: curtain.css(on: host))
             // And the blocker, on or off for where it is going.
@@ -4312,7 +4313,19 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         guard let navigation else { return }
+        saveBackForwardSnapshot(for: webView)
         tab(for: webView)?.extensionReturn.started(navigation, at: webView.url)
+    }
+
+    /// Captures a snapshot of the current back-forward history item before leaving it,
+    /// so WebKit's swipe navigation gesture displays the rendered page preview rather
+    /// than an empty background during back and forward trackpad swipes.
+    private func saveBackForwardSnapshot(for webView: WKWebView) {
+        guard let current = webView.backForwardList.currentItem else { return }
+        let sel = NSSelectorFromString("_saveBackForwardSnapshotForItem:")
+        guard webView.responds(to: sel) else { return }
+        typealias SaveSnapshot = @convention(c) (AnyObject, Selector, AnyObject) -> Void
+        unsafeBitCast(webView.method(for: sel), to: SaveSnapshot.self)(webView, sel, current)
     }
 
     func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {
