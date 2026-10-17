@@ -4264,7 +4264,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
 
         // The next document gets this site's stylesheet of hidden things,
         // decided here because here is the last moment before it loads.
-        if action.targetFrame?.isMainFrame ?? true, let tab = tab(for: webView) {
+        if action.targetFrame?.isMainFrame ?? true, action.navigationType != .backForward, let tab = tab(for: webView) {
             let host = curtain.host(of: url)
             tab.arm(hiding: curtain.css(on: host))
             // And the blocker, on or off for where it is going.
@@ -4846,20 +4846,23 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             look(forward: true)
         }
         tellStore(tab)
-        // A page that arrived after a password went out: did the sign-in take?
-        tab.settleSignIn()
-        // The icon is asked for whether or not the tab is showing one: it may
-        // be turned on a moment later, and a tab that then has to wait for a
-        // fetch looks broken.
-        Favicons.shared.fetch(for: tab)
-        guard !tab.shy, !tab.bench else { return }
-        history.record(url, title: tab.title)
-        // A site's home page that says where its search is (OpenSearch):
-        // with Search a site on, it joins the list (see SiteSearch.learn).
-        if prefs.searchesSites, url.scheme == "https", url.path.isEmpty || url.path == "/" {
-            webView.evaluateInSearch(SiteSearch.lookup) { value in
-                guard let text = value as? String, let description = URL(string: text) else { return }
-                MainActor.assumeIsolated { SiteSearch.learn(from: url, description: description) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self, weak tab, weak webView] in
+            guard let self, let tab, let webView else { return }
+            // A page that arrived after a password went out: did the sign-in take?
+            tab.settleSignIn()
+            // The icon is asked for whether or not the tab is showing one: it may
+            // be turned on a moment later, and a tab that then has to wait for a
+            // fetch looks broken.
+            Favicons.shared.fetch(for: tab)
+            guard !tab.shy, !tab.bench else { return }
+            self.history.record(url, title: tab.title)
+            // A site's home page that says where its search is (OpenSearch):
+            // with Search a site on, it joins the list (see SiteSearch.learn).
+            if self.prefs.searchesSites, url.scheme == "https", url.path.isEmpty || url.path == "/" {
+                webView.evaluateInSearch(SiteSearch.lookup) { value in
+                    guard let text = value as? String, let description = URL(string: text) else { return }
+                    MainActor.assumeIsolated { SiteSearch.learn(from: url, description: description) }
+                }
             }
         }
     }
