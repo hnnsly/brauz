@@ -4844,12 +4844,14 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
     func webView(_ webView: WKWebView, renderingProgressDidChange events: UInt) {
         guard events & PageView.firstFrame != 0 else { return }
         (webView as? PageView)?.showFirstFrame()
+        saveBackForwardSnapshot(for: webView)
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         // A page with nothing to lay out never has a first frame. Done is
         // done, and it is shown.
         (webView as? PageView)?.showFirstFrame()
+        saveBackForwardSnapshot(for: webView)
         guard let tab = anyTab(for: webView), let url = tab.address else { return }
         tab.uncover()
         // The find bar still open over a page that has just come in: look

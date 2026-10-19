@@ -89,4 +89,43 @@ final class SwipeBackNavigationTests: XCTestCase {
         let uiLoading = config.preferences.value(forKey: "_useUIProcessForBackForwardItemLoading") as? Bool
         XCTAssertEqual(uiLoading, true, "UI process back forward item loading must be enabled")
     }
+
+    func testDidFinishSavesBackForwardSnapshotForItem() throws {
+        let browser = Browser(record: WindowRecord())
+        let tab = try XCTUnwrap(browser.open(URL(string: "about:blank")!, foreground: true))
+        window.contentView = tab.web
+
+        // Simulate page finishing load
+        browser.webView(tab.web, didFinish: nil)
+
+        let sel = NSSelectorFromString("_saveBackForwardSnapshotForItem:")
+        XCTAssertTrue(tab.web.responds(to: sel), "WKWebView must support _saveBackForwardSnapshotForItem:")
+    }
+
+    func testBackNavigationUsesBackForwardCacheInBrauzTab() throws {
+        let browser = Browser(record: WindowRecord())
+        let tab = try XCTUnwrap(browser.open(URL(string: "https://example.com")!, foreground: true))
+        window.contentView = tab.web
+
+        let loop = RunLoop.main
+        let deadline = Date().addingTimeInterval(8)
+        while (tab.web.isLoading || tab.web.url == nil) && Date() < deadline {
+            loop.run(until: Date().addingTimeInterval(0.05))
+        }
+
+        tab.web.load(URLRequest(url: URL(string: "https://httpbin.org/get")!))
+        let deadline2 = Date().addingTimeInterval(8)
+        while (tab.web.isLoading || tab.web.url?.host() == "example.com") && Date() < deadline2 {
+            loop.run(until: Date().addingTimeInterval(0.05))
+        }
+
+        tab.web.goBack()
+        let deadline3 = Date().addingTimeInterval(8)
+        while (tab.web.isLoading || tab.web.url?.host() == "httpbin.org") && Date() < deadline3 {
+            loop.run(until: Date().addingTimeInterval(0.05))
+        }
+
+        let usedBFCache = tab.web.value(forKey: "_isUsingBackForwardCache") as? Bool
+        XCTAssertEqual(usedBFCache, true, "Brauz tab should restore from Back-Forward Cache")
+    }
 }
