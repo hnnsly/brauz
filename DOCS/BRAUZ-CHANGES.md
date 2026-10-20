@@ -6,8 +6,17 @@ Each section is headed by the tag it ships in, and the release workflow puts tha
 
 ## Unreleased
 
-- Brauz comes for Apple Silicon Macs only. There is no Brauz-Intel.dmg from this release on.
-- Up to date with upstream/main b2048a0 PLUS later commits, arrow/natural bounce/no reading progress, no early pause and draft max(delay,1h), Little address/Back/placement/spaces/extensions, no automatic profile copy, own daily notices/manual sync, DMG Brauz text.
+## v1.0.5.b1
+
+- Up to date with Search v1.0.5 and subsequent upstream commits through b2048a0.
+- Upstream arrow-disc navigation gesture and natural vertical bounce.
+- Removed reading-progress indicator and per-scroll tracking.
+- Little Window: space selector to switch browsing space and cookie store immediately, address and search entry, Back button, and remembered placement.
+- Little Window: ordinary target=_blank links navigate in the same window while preserving popup protections and extensions.
+- Tabs: drafts protected until one hour idle before sleep.
+- Popups: fixed undo memory crash after typing in extension popovers.
+- Images: fast bounded streaming for image copying.
+- Packaging: disk image background updated to Brauz. Release titles include the tag name. Apple Silicon release builds.
 
 ## v1.0.4-brauz.3
 

@@ -96,7 +96,7 @@ jobs:
           EOF
 
           gh release create "$GITHUB_REF_NAME" build/Brauz.dmg \
-            --title "Brauz $VERSION (build $BUILD)" \
+            --title "Brauz $GITHUB_REF_NAME (build $BUILD)" \
             --notes-file "$RUNNER_TEMP/notes.md"
 
       - name: Clean up keychain and credentials

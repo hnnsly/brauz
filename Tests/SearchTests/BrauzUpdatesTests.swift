@@ -8,6 +8,7 @@ final class BrauzUpdatesTests: XCTestCase {
             ("Brauz 1.0.5 (build 202610201200)", "1.0.5", 202610201200),
             ("Brauz 2.0 (build 202701010000)", "2.0", 202701010000),
             ("Brauz 1.0.5-beta (build 202610201200)", "1.0.5-beta", 202610201200),
+            ("Brauz v1.0.5.b1 (build 202610202322)", "v1.0.5.b1", 202610202322),
             ("Brauz 1.0.4 (build 202610071500) - Hotfix", "1.0.4", 202610071500),
         ]
         for c in cases {
