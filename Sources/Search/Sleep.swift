@@ -76,6 +76,16 @@ extension Browser {
         return set > 0 ? set : SleepPace.chosen.wait
     }
 
+    /// The shortest an unseen tab holding something typed may stay awake:
+    /// an hour, even when a shorter wait was chosen for other tabs.
+    static let draftSleepThreshold: TimeInterval = 3600
+
+    /// How long a tab holding a typed draft must stay unseen before it may
+    /// sleep: once both the chosen sleep wait and an hour have passed.
+    static var draftSleepAfter: TimeInterval {
+        max(sleepAfter, draftSleepThreshold)
+    }
+
     /// Started once, at launch. The same look closes the tabs left alone
     /// longest, when tabs close themselves (see Closing.swift).
     func watchForSleep() {
@@ -103,15 +113,14 @@ extension Browser {
 
     /// Every tab that has gone long enough without being looked at, the one
     /// left longest first.
-    func sleepIdle(within given: TimeInterval? = nil) {
+    func sleepIdle(within given: TimeInterval? = nil, now: Date = Date()) {
         guard prefs.sleepsTabs else { return }
         let wait = given ?? Browser.sleepAfter
-        let now = Date()
         // The rows of the other spaces too: parked is not the same as used.
         let idle = (tabs + parkedTabs)
             .filter { now.timeIntervalSince($0.touched) >= wait && awake(because: $0) == nil }
             .sorted { $0.touched < $1.touched }
-        for tab in idle { self.sleep(tab) }
+        for tab in idle { self.sleep(tab, now: now) }
     }
 
     /// Why a tab has to stay awake — nil when nothing keeps it. The clock is
@@ -185,14 +194,14 @@ extension Browser {
     /// Asks the page whether it holds anything typed, pictures it, then lets
     /// it go — looking again at each step, since each takes a moment and you
     /// may have gone back to the tab in the meantime.
-    func sleep(_ tab: Tab, done: ((String) -> Void)? = nil) {
+    func sleep(_ tab: Tab, now: Date = Date(), done: ((String) -> Void)? = nil) {
         if let reason = awake(because: tab) {
             done?(reason)
             return
         }
         tab.unsaved { [weak self, weak tab] typed in
             guard let self, let tab else { return }
-            if typed {
+            if typed && now.timeIntervalSince(tab.touched) < Browser.draftSleepAfter {
                 done?("holding something typed")
                 return
             }
