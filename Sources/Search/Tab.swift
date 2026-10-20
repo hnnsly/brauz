@@ -219,30 +219,6 @@ enum Autoplay {
     }
 }
 
-/// How far down its page a tab is. Its own object, watched by the fill in
-/// the tab's pill alone: as part of the tab, every percent scrolled re-ran
-/// everything that watches the tab — the page's stage, the buttons, the
-/// row — two to four milliseconds of the window's time each, while WebKit
-/// needed that thread to put the scrolled page on screen.
-@MainActor
-final class Reading: ObservableObject {
-    @Published var value: Double = 0
-}
-
-/// The fill itself: the grey that grows from the left of the tab you are on
-/// as you read down its page, in a width it is given.
-struct ReadingFill: View {
-    @ObservedObject var meter: Reading
-    let width: CGFloat
-
-    var body: some View {
-        Rectangle()
-            .fill(Palette.ink.opacity(0.055))
-            .frame(width: width * meter.value)
-            .animation(.easeOut(duration: 0.15), value: meter.value)
-    }
-}
-
 @MainActor
 final class Tab: ObservableObject, Identifiable {
     let id = UUID()
@@ -339,19 +315,9 @@ final class Tab: ObservableObject, Identifiable {
     /// Set when the page never arrived — no host, no network, a refused
     /// connection. Shown in place of the page rather than in a dialog.
     @Published var failure: String?
-    /// How far down the page you are, nought to one. The tab's own pill fills
-    /// with it. Kept apart from the rest of the tab (see Reading): it changes
-    /// all the way down a page, and only the fill has any use for it.
-    let meter = Reading()
     /// How long the page is, in screens of it: one for a page that doesn't
-    /// scroll. Read with the meter, from the same report; nothing is drawn
-    /// from it as it changes (see TabSwitcher's moons). None before the page
-    /// has said.
+    /// scroll. None before the page has said.
     private(set) var screens: Double?
-    var reading: Double {
-        get { meter.value }
-        set { if meter.value != newValue { meter.value = newValue } }
-    }
 
     /// True while the page has been stripped back to its article.
     @Published private(set) var reader = false
@@ -1086,16 +1052,9 @@ final class Tab: ObservableObject, Identifiable {
     func pickingEnded() { onPickEnd?(self) }
     func pickingFailed(_ reason: String) { onPickTrouble?(self, reason) }
 
-    /// Called from the page, a few dozen times a second at most — the script
-    /// already waits for a frame before it says anything.
-    func scrolled(to y: Double, of ceiling: Double, screens: Double? = nil) {
-        if let screens { self.screens = (max(1, screens) * 10).rounded() / 10 }
-        // In hundredths, and only when that changes. The page reports once a
-        // frame while it scrolls — 120 times a second on a 120 Hz screen — and
-        // each new value had the window redraw the tab's fill, a third of a
-        // core on the thread WebKit needs to put the scrolled page on screen.
-        let fraction = ceiling > 0 ? (min(1, max(0, y / ceiling)) * 100).rounded() / 100 : 0
-        if fraction != reading { reading = fraction }
+    /// Page length in screens, reported when rounded screens changes.
+    func pageLength(_ value: Double) {
+        screens = (max(1, value) * 10).rounded() / 10
     }
 
     func go(to url: URL) {
@@ -1115,7 +1074,7 @@ final class Tab: ObservableObject, Identifiable {
         held = nil
         title = ""
         failure = nil
-        reading = 0
+        screens = nil
         reader = false
         typing = false
         immersed = false
@@ -1160,7 +1119,7 @@ final class Tab: ObservableObject, Identifiable {
         pending = url
         memory = nil
         picture = nil
-        reading = 0
+        screens = nil
         noisy = false
         stale = false
         pull = nil
@@ -1417,7 +1376,6 @@ final class Tab: ObservableObject, Identifiable {
         guard let url = pending else { return false }
         pending = nil
         failure = nil
-        reading = 0
         reader = false
         typing = false
         immersed = false
@@ -1450,7 +1408,7 @@ final class Tab: ObservableObject, Identifiable {
         icon = nil
     }
 
-    func touch(at when: Date = Date()) { touched = when }
+    func touch(at date: Date = Date()) { touched = date }
 
     /// True when the web view holds nothing — never loaded, or emptied —
     /// while the tab still names a page. The white page, in other words.
@@ -2266,31 +2224,41 @@ final class ScrollRelay: NSObject, WKScriptMessageHandler {
             MainActor.assumeIsolated { tab?.web.answer(free: side == "free") }
             return
         }
-        guard let y = body["y"] as? Double,
-              let ceiling = body["max"] as? Double
-        else { return }
-        let screens = body["screens"] as? Double
-        MainActor.assumeIsolated { tab?.scrolled(to: y, of: ceiling, screens: screens) }
+        guard let screens = body["screens"] as? Double else { return }
+        MainActor.assumeIsolated { tab?.pageLength(screens) }
     }
 
-    /// Reports at most once a frame, and passively, so a page that scrolls
-    /// smoothly without us keeps scrolling smoothly with us.
+    /// Reports page length in screens when rounded screens changes.
     static let script = """
     (function () {
-      var waiting = false;
-      function tell() {
+      var last = null;
+      function report() {
         var root = document.documentElement;
-        var y = window.scrollY || root.scrollTop || 0;
-        var ceiling = Math.max(1, (root.scrollHeight || 0) - window.innerHeight);
-        var screens = (root.scrollHeight || 0) / Math.max(1, window.innerHeight);
-        window.webkit.messageHandlers.\(name).postMessage({ y: y, max: ceiling, screens: screens });
+        var body = document.body;
+        var height = Math.max(
+          root ? root.scrollHeight : 0,
+          body ? body.scrollHeight : 0
+        );
+        var vh = window.innerHeight || (root ? root.clientHeight : 0) || 1;
+        var raw = height / Math.max(1, vh);
+        var rounded = Math.round(Math.max(1, raw) * 10) / 10;
+        if (rounded === last) return;
+        last = rounded;
+        window.webkit.messageHandlers.\(name).postMessage({ screens: rounded });
       }
-      window.addEventListener('scroll', function () {
-        if (waiting) return;
-        waiting = true;
-        requestAnimationFrame(function () { waiting = false; tell(); });
-      }, { passive: true });
-      tell();
+      if (window.ResizeObserver) {
+        var ro = new ResizeObserver(function () { report(); });
+        if (document.documentElement) ro.observe(document.documentElement);
+        if (document.body) ro.observe(document.body);
+        else {
+          window.addEventListener('DOMContentLoaded', function () {
+            if (document.body) ro.observe(document.body);
+            report();
+          }, { passive: true, once: true });
+        }
+      }
+      window.addEventListener('resize', report, { passive: true });
+      report();
     })();
     """
 }

@@ -226,9 +226,6 @@ final class Preferences: ObservableObject {
     @Published var searchesSites: Bool {
         didSet { store.set(searchesSites, forKey: "search.sites") }
     }
-    @Published var showsReading: Bool {
-        didSet { store.set(showsReading, forKey: "tabs.reading") }
-    }
     /// The ad blocker. On unless turned off; there is nothing else to it.
     @Published var shielded: Bool {
         didSet { store.set(shielded, forKey: "shield") }
@@ -541,7 +538,6 @@ final class Preferences: ObservableObject {
         startsFresh = store.bool(forKey: Preferences.freshKey)
         searchesSites = store.bool(forKey: "search.sites")
         siteNotifications = store.object(forKey: "notifications.ask") as? Bool ?? true
-        showsReading = store.object(forKey: "tabs.reading") as? Bool ?? true
         shielded = store.object(forKey: "shield") as? Bool ?? true
         let keeps = store.bool(forKey: "sites.keep")
         keepsSignIns = keeps

@@ -1756,31 +1756,9 @@ final class Bench {
                     "spot": [list.spot.minX, list.spot.minY, list.spot.width, list.spot.height]])
 
         case "fill":
-            // What the window spends on the page scrolling: the page's report
-            // of where it is, STEPS times, 8 ms apart, each timed until the
-            // run loop rests again — SwiftUI's update and Core Animation's
-            // commit included. For the reading fill and what watches the tab.
+            // The reading progress feature has been removed.
             guard Store.testing else { answer(["error": "fill only works on a --test run"]); return }
-            guard let tab = browser.active else { answer(["error": "no tab"]); return }
-            let steps = request["steps"] as? Int ?? 200
-            var times: [Double] = []
-            @MainActor func step(_ n: Int) {
-                guard n < steps else {
-                    let sorted = times.sorted()
-                    answer(["steps": steps, "median": sorted[sorted.count / 2], "p90": sorted[sorted.count * 9 / 10],
-                            "total": times.reduce(0, +), "reading": tab.reading])
-                    return
-                }
-                let start = CACurrentMediaTime()
-                // Down and back, half a percent at a time.
-                let at = Double(n % 200 < 100 ? n % 100 : 100 - n % 100) / 100
-                tab.scrolled(to: at * 4000, of: 4000)
-                Bench.whenResting(since: start) { ms in
-                    times.append(ms)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.008) { step(n + 1) }
-                }
-            }
-            step(0)
+            answer(["error": "fill benchmark is unavailable: reading progress has been removed"])
 
         case "peek":
             // A link's page in the peek panel over the tab in front, as a
@@ -2650,6 +2628,11 @@ final class Bench {
             switch request["what"] as? String ?? "" {
             case "keep": LittleWindow.all.last?.keep()
             case "close": LittleWindow.all.last?.close()
+            case "space":
+                if Store.testing, let raw = (request["spaceID"] as? String) ?? (request["space"] as? String),
+                   let id = UUID(uuidString: raw) {
+                    LittleWindow.all.last?.switchSpace(to: id)
+                }
             case "state": break
             case "look": break
             default:
@@ -2674,6 +2657,8 @@ final class Bench {
                 "activeID": browser.activeID.map { String($0.uuidString.prefix(8)).lowercased() } ?? "",
                 "fronted": address(LittleWindow.fronted),
                 "littles": LittleWindow.all.map { $0.tab.address?.absoluteString ?? "" },
+                "littleIDs": LittleWindow.all.map { Bench.short($0.tab) },
+                "spaceIDs": LittleWindow.all.map { $0.spaceID.uuidString },
                 "said": LittleWindow.all.last?.said ?? "",
                 "zoom": LittleWindow.all.last?.tab.built.map { Double($0.pageZoom) } ?? 0,
                 "failures": LittleWindow.all.map { $0.tab.failure ?? "" },
@@ -3499,7 +3484,11 @@ final class Bench {
     /// `window.open` carries no flask and would be out of reach otherwise.
     private func find(_ request: [String: Any], in browser: Browser) -> Tab? {
         guard let ref = (request["id"] as? String)?.lowercased(), !ref.isEmpty else { return nil }
-        return browser.tabs.first { (Store.testing || $0.bench) && $0.id.uuidString.lowercased().hasPrefix(ref) }
+        if Store.testing {
+            let pool = browser.tabs + browser.parkedTabs + LittleWindow.all.map(\.tab)
+            return pool.first { $0.id.uuidString.lowercased().hasPrefix(ref) }
+        }
+        return browser.tabs.first { $0.bench && $0.id.uuidString.lowercased().hasPrefix(ref) }
     }
 
     private func missing(_ request: [String: Any]) -> [String: Any] {
