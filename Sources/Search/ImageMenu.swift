@@ -150,19 +150,7 @@ extension Browser {
     /// the frame it was right-clicked in (idea 179).
     func imageData(at url: URL, in tab: Tab) async -> Data? {
         guard url.scheme?.lowercased() == "blob" else {
-            // Read as it comes, and let go past the limit.
-            guard let (bytes, response) = try? await Browser.fetcher.bytes(from: url),
-                  (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? true,
-                  response.expectedContentLength <= Int64(Browser.largestImage)
-            else { return nil }
-            var data = Data()
-            do {
-                for try await byte in bytes {
-                    data.append(byte)
-                    if data.count > Browser.largestImage { return nil }
-                }
-            } catch { return nil }
-            return data
+            return await BoundedImageFetcher.fetch(url: url, limit: Browser.largestImage)
         }
         guard let web = tab.built else { return nil }
         let read = """
@@ -221,4 +209,144 @@ private final class ImageMenuItem: NSMenuItem {
     required init(coder: NSCoder) { fatalError() }
 
     @objc private func run() { act() }
+}
+
+/// An ephemeral streaming fetch that accumulates chunks up to `limit` bytes.
+/// Rejects non-2xx HTTP and oversized responses before body bytes arrive,
+/// cancels on body excess, and breaks session and delegate lifetime on finish.
+private final class BoundedImageFetcher: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let limit: Int
+    private let lock = NSLock()
+    private var accumulated = Data()
+    private var session: URLSession?
+    private var task: URLSessionDataTask?
+    private var continuation: CheckedContinuation<Data?, Never>?
+    private var hasCompleted = false
+
+    private init(limit: Int) {
+        self.limit = limit
+        super.init()
+    }
+
+    static func fetch(url: URL, limit: Int) async -> Data? {
+        let fetcher = BoundedImageFetcher(limit: limit)
+        return await fetcher.start(url: url)
+    }
+
+    private func start(url: URL) async -> Data? {
+        if Task.isCancelled { return nil }
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { cont in
+                lock.lock()
+                if hasCompleted {
+                    lock.unlock()
+                    cont.resume(returning: nil)
+                    return
+                }
+                self.continuation = cont
+
+                let configuration = (Browser.fetcher.configuration.copy() as? URLSessionConfiguration) ?? Browser.fetcher.configuration
+                configuration.httpCookieStorage = nil
+                configuration.httpShouldSetCookies = false
+                configuration.urlCache = nil
+                configuration.urlCredentialStorage = nil
+
+                let queue = OperationQueue()
+                queue.maxConcurrentOperationCount = 1
+
+                let session = URLSession(configuration: configuration, delegate: self, delegateQueue: queue)
+                let task = session.dataTask(with: url)
+                self.session = session
+                self.task = task
+                lock.unlock()
+
+                task.resume()
+            }
+        } onCancel: {
+            self.cancel()
+        }
+    }
+
+    private func cancel() {
+        complete(with: nil)
+    }
+
+    private func complete(with result: Data?) {
+        lock.lock()
+        guard !hasCompleted else {
+            lock.unlock()
+            return
+        }
+        hasCompleted = true
+        let cont = continuation
+        continuation = nil
+        let currentTask = task
+        task = nil
+        let currentSession = session
+        session = nil
+        lock.unlock()
+
+        currentTask?.cancel()
+        currentSession?.invalidateAndCancel()
+        cont?.resume(returning: result)
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+    ) {
+        lock.lock()
+        if hasCompleted {
+            lock.unlock()
+            completionHandler(.cancel)
+            return
+        }
+        lock.unlock()
+
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            completionHandler(.cancel)
+            complete(with: nil)
+            return
+        }
+        if response.expectedContentLength > Int64(limit) {
+            completionHandler(.cancel)
+            complete(with: nil)
+            return
+        }
+        lock.lock()
+        if response.expectedContentLength > 0 {
+            accumulated.reserveCapacity(Int(response.expectedContentLength))
+        }
+        lock.unlock()
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        lock.lock()
+        guard !hasCompleted else {
+            lock.unlock()
+            return
+        }
+        guard data.count <= limit - accumulated.count else {
+            lock.unlock()
+            dataTask.cancel()
+            complete(with: nil)
+            return
+        }
+        accumulated.append(data)
+        lock.unlock()
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if error != nil {
+            complete(with: nil)
+        } else {
+            lock.lock()
+            let result = accumulated
+            lock.unlock()
+            complete(with: result)
+        }
+    }
 }
