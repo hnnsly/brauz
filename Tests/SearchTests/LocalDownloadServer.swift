@@ -15,6 +15,7 @@ final class LocalDownloadServer {
     private let requestsLock = NSLock()
     private var requests: [Request] = []
     private var completedPaths: [String] = []
+    private var pathBytesSent: [String: Int] = [:]
     private var stopped = false
     private let cancelTransferGate = DispatchSemaphore(value: 0)
     private let payload: Data
@@ -102,6 +103,12 @@ final class LocalDownloadServer {
         return completedPaths.filter { $0 == path }.count
     }
 
+    func bytesSent(_ path: String) -> Int {
+        requestsLock.lock()
+        defer { requestsLock.unlock() }
+        return pathBytesSent[path] ?? 0
+    }
+
     func expectedBytes() -> Data { payload }
 
     func stop() {
@@ -141,6 +148,77 @@ final class LocalDownloadServer {
         let attempt = requests.filter { $0.path == request.path }.count
         let shouldTruncate = ["/failure.bin", "/retry.bin"].contains(request.path) && attempt == 1
         requestsLock.unlock()
+
+        if request.path == "/little-one" {
+            let body = Data("<!doctype html><html><head><title>Little one</title><script>window.fixtureReady = true;</script></head><body><a id=\"blank\" href=\"/little-two\" target=\"_blank\">Blank Link</a><a id=\"next\" href=\"/little-two\">Next Link</a><textarea id=\"draft\"></textarea><button id=\"popup\" onclick=\"window.open('/little-two','signin','width=400,height=300')\">Popup</button></body></html>".utf8)
+            let headers = "HTTP/1.1 200 OK\r\n"
+                + "Content-Type: text/html; charset=utf-8\r\n"
+                + "Content-Length: \(body.count)\r\n"
+                + "Connection: close\r\n\r\n"
+            if sendAll(client, Data(headers.utf8)), sendAll(client, body) {
+                requestsLock.lock()
+                completedPaths.append(request.path)
+                requestsLock.unlock()
+            }
+            return
+        }
+
+        if request.path == "/little-two" {
+            let body = Data("<!doctype html><html><head><title>Little two</title><script>window.fixtureReady = true;</script></head><body><a id=\"back\" href=\"/little-one\">Back Link</a></body></html>".utf8)
+            let headers = "HTTP/1.1 200 OK\r\n"
+                + "Content-Type: text/html; charset=utf-8\r\n"
+                + "Content-Length: \(body.count)\r\n"
+                + "Connection: close\r\n\r\n"
+            if sendAll(client, Data(headers.utf8)), sendAll(client, body) {
+                requestsLock.lock()
+                completedPaths.append(request.path)
+                requestsLock.unlock()
+            }
+            return
+        }
+
+        if request.path == "/image-fast.bin" || request.path == "/image-unbounded.bin" {
+            let unbounded = request.path == "/image-unbounded.bin"
+            let headers = "HTTP/1.1 200 OK\r\n"
+                + "Content-Type: application/octet-stream\r\n"
+                + (unbounded ? "" : "Content-Length: \(payload.count)\r\n")
+                + "Connection: close\r\n\r\n"
+            guard sendAll(client, Data(headers.utf8)) else { return }
+            var sent = 0
+            while sent < payload.count {
+                requestsLock.lock()
+                let shouldStop = stopped
+                requestsLock.unlock()
+                guard !shouldStop else { return }
+                let next = min(sent + 16 * 1024, payload.count)
+                guard sendAll(client, payload.subdata(in: sent..<next)) else { return }
+                requestsLock.lock()
+                pathBytesSent[request.path, default: 0] += next - sent
+                requestsLock.unlock()
+                sent = next
+                if unbounded { Thread.sleep(forTimeInterval: 0.001) }
+            }
+            requestsLock.lock()
+            completedPaths.append(request.path)
+            requestsLock.unlock()
+            return
+        }
+
+        if request.path == "/image-oversized.bin" {
+            let headers = "HTTP/1.1 200 OK\r\n"
+                + "Content-Type: application/octet-stream\r\n"
+                + "Content-Length: 50000001\r\n"
+                + "Connection: close\r\n\r\n"
+            guard sendAll(client, Data(headers.utf8)), sendAll(client, Data([0x41])) else { return }
+            requestsLock.lock()
+            pathBytesSent[request.path, default: 0] += 1
+            requestsLock.unlock()
+            // CFNetwork can wait for the first body byte before delivering
+            // response headers. The rest stays pending until cancellation.
+            var byte: UInt8 = 0
+            _ = Darwin.recv(client, &byte, 1, 0)
+            return
+        }
 
         if request.path == "/page" {
             let body = Data("<!doctype html><title>Download fixture</title><p>Local test page</p>".utf8)

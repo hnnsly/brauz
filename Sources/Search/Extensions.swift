@@ -104,6 +104,17 @@ final class Extensions: NSObject, ObservableObject {
         windows[key] = made
         return made
     }
+
+    /// The small windows told to WebKit, by window, oldest first.
+    private var littles: [ObjectIdentifier] = []
+
+    func window(of little: LittleWindow) -> ExtensionWindow {
+        let key = ObjectIdentifier(little)
+        if let known = windows[key] { return known }
+        let made = ExtensionWindow(owner: self, little: little)
+        windows[key] = made
+        return made
+    }
     /// Where each extension's button is on screen, for its popup to hang from.
     var anchors: [String: WeakView] = [:]
 
@@ -375,10 +386,72 @@ final class Extensions: NSObject, ObservableObject {
         if let window = windows.removeValue(forKey: key) { controller.didCloseWindow(window) }
     }
 
+    // MARK: - small windows
+
+    /// A small window for a link (Little.swift), told to WebKit as a window
+    /// of its own with its one tab. Its page is a tab like any other to an
+    /// extension: one WebKit knew no tab for got no answer to what it asked
+    /// the extension's worker, and a password manager filled nothing.
+    func opened(_ little: LittleWindow) {
+        let key = ObjectIdentifier(little)
+        guard windows[key] == nil, seen(little.tab) else { return }
+        littles.append(key)
+        controller.didOpenWindow(window(of: little))
+        orders[key] = [little.tab.id]
+        controller.didOpenTab(adapter(for: little.tab))
+        watch(little.tab)
+        controller.didActivateTab(adapter(for: little.tab), previousActiveTab: nil)
+    }
+
+    /// Open in Search: the tab goes into a window's row, and that row says
+    /// so (see follow): a move from the small window, which then closes.
+    func keeping(_ little: LittleWindow) {
+        let key = ObjectIdentifier(little)
+        guard windows[key] != nil else { return }
+        inTransit[little.tab.id] = (key, 0)
+    }
+
+    /// Closed without being kept: its tab and the window, gone for WebKit.
+    /// One kept is closed by the move instead (see follow).
+    func closed(_ little: LittleWindow) {
+        let key = ObjectIdentifier(little)
+        guard windows[key] != nil, inTransit[little.tab.id]?.window != key else { return }
+        for id in orders[key] ?? [] {
+            if let adapter = adapters[id] { controller.didCloseTab(adapter, windowIsClosing: true) }
+            adapters[id] = nil
+            watching[id] = nil
+        }
+        forgetLittle(key)
+    }
+
+    private func forgetLittle(_ key: ObjectIdentifier) {
+        orders[key] = nil
+        littles.removeAll { $0 == key }
+        guard let window = windows.removeValue(forKey: key) else { return }
+        // Empty first: WebKit closes whatever a closing window still lists,
+        // and a kept tab, moved out a moment ago, was closed with it.
+        window.little = nil
+        controller.didCloseWindow(window)
+    }
+
+    /// The small window in front, if the window in front is one.
+    var littleInFront: ExtensionWindow? {
+        LittleWindow.owning(NSApp.keyWindow).flatMap { windows[ObjectIdentifier($0)] }
+    }
+
+    /// Every small window told to WebKit, oldest first.
+    var littleWindows: [ExtensionWindow] { littles.compactMap { windows[$0] } }
+
     /// A window came to the front (windows.onFocusChanged).
     func focused(_ browser: Browser) {
         guard following[ObjectIdentifier(browser)] != nil else { return }
         controller.didFocusWindow(window(of: browser))
+    }
+
+    func focused(_ little: LittleWindow) {
+        let key = ObjectIdentifier(little)
+        guard windows[key] != nil else { return }
+        controller.didFocusWindow(window(of: little))
     }
 
     private func follow(_ tabs: [Tab], in browser: Browser) {
@@ -406,6 +479,8 @@ final class Extensions: NSObject, ObservableObject {
                 // From another window: a move between windows, as WebKit has it.
                 orders[from.0]?.removeAll { $0 == tab.id }
                 controller.didMoveTab(adapter(for: tab), from: from.1, in: other)
+                // A small window kept into the row is left with nothing.
+                if littles.contains(from.0), orders[from.0]?.isEmpty != false { forgetLittle(from.0) }
                 continue
             }
             controller.didOpenTab(adapter(for: tab))
@@ -1417,11 +1492,11 @@ final class Extensions: NSObject, ObservableObject {
 extension Extensions: WKWebExtensionControllerDelegate {
     /// Every window, oldest first — the order Security's shim counts on.
     func webExtensionController(_ controller: WKWebExtensionController, openWindowsFor extensionContext: WKWebExtensionContext) -> [any WKWebExtensionWindow] {
-        Browsers.all.map(window(of:))
+        Browsers.all.map(window(of:)) + littleWindows
     }
 
     func webExtensionController(_ controller: WKWebExtensionController, focusedWindowFor extensionContext: WKWebExtensionContext) -> (any WKWebExtensionWindow)? {
-        window
+        littleInFront ?? window
     }
 
     /// Where an extension may send a tab. Not to javascript:, which would run
@@ -1644,11 +1719,16 @@ final class ExtensionTab: NSObject, WKWebExtensionTab {
 
     /// The window this tab is in.
     private var browser: Browser? { tab.flatMap(owner.browser(of:)) }
+    /// The small window it is the page of, when no window's row holds it.
+    private var little: LittleWindow? { browser == nil ? tab.flatMap(LittleWindow.holding) : nil }
 
-    func window(for context: WKWebExtensionContext) -> (any WKWebExtensionWindow)? { browser.map(owner.window(of:)) }
+    func window(for context: WKWebExtensionContext) -> (any WKWebExtensionWindow)? {
+        browser.map(owner.window(of:)) ?? little.map(owner.window(of:))
+    }
 
     func indexInWindow(for context: WKWebExtensionContext) -> Int {
-        guard let tab, let browser else { return NSNotFound }
+        guard let tab else { return NSNotFound }
+        guard let browser else { return little != nil ? 0 : NSNotFound }
         return owner.visibleTabs(of: browser).firstIndex { $0.id == tab.id } ?? NSNotFound
     }
 
@@ -1663,7 +1743,7 @@ final class ExtensionTab: NSObject, WKWebExtensionTab {
     func title(for context: WKWebExtensionContext) -> String? { tab?.title }
     func url(for context: WKWebExtensionContext) -> URL? { sealed(context) ? nil : tab?.address }
     func isLoadingComplete(for context: WKWebExtensionContext) -> Bool { !(tab?.loading ?? false) }
-    func isSelected(for context: WKWebExtensionContext) -> Bool { tab?.id == browser?.activeID }
+    func isSelected(for context: WKWebExtensionContext) -> Bool { little != nil || tab?.id == browser?.activeID }
     func isPinned(for context: WKWebExtensionContext) -> Bool { tab?.pin != nil }
     func isPlayingAudio(for context: WKWebExtensionContext) -> Bool { tab?.noisy ?? false }
     func zoomFactor(for context: WKWebExtensionContext) -> Double { Double(tab?.built?.pageZoom ?? 1) }
@@ -1701,11 +1781,13 @@ final class ExtensionTab: NSObject, WKWebExtensionTab {
     func goForward(for context: WKWebExtensionContext) async throws { tab?.forward() }
 
     func activate(for context: WKWebExtensionContext) async throws {
+        if let little { return little.window.makeKeyAndOrderFront(nil) }
         guard let tab, let browser else { return }
         browser.activateForExtension(tab)
     }
 
     func close(for context: WKWebExtensionContext) async throws {
+        if let little { return little.close() }
         guard let tab else { return }
         browser?.close(tab)
     }
@@ -1722,21 +1804,33 @@ final class ExtensionWindow: NSObject, WKWebExtensionWindow {
     unowned let owner: Extensions
     /// The window's browser (see Windows.swift).
     weak var browser: Browser?
+    /// Or the small window for a link this stands for (see Little.swift):
+    /// one tab, and a popup window to an extension, as Chrome's app
+    /// windows are.
+    weak var little: LittleWindow?
     init(owner: Extensions, browser: Browser) {
         self.owner = owner
         self.browser = browser
     }
+    init(owner: Extensions, little: LittleWindow) {
+        self.owner = owner
+        self.little = little
+    }
 
-    private var nsWindow: NSWindow? { browser?.window }
+    private var nsWindow: NSWindow? { browser?.window ?? little?.window }
 
     func tabs(for context: WKWebExtensionContext) -> [any WKWebExtensionTab] {
+        if let little { return [owner.adapter(for: little.tab)] }
         guard let browser else { return [] }
         return owner.visibleTabs(of: browser).map(owner.adapter(for:))
     }
 
-    func activeTab(for context: WKWebExtensionContext) -> (any WKWebExtensionTab)? { browser.flatMap(owner.activeAdapter(of:)) }
+    func activeTab(for context: WKWebExtensionContext) -> (any WKWebExtensionTab)? {
+        if let little { return owner.adapter(for: little.tab) }
+        return browser.flatMap(owner.activeAdapter(of:))
+    }
     func windowType(for context: WKWebExtensionContext) -> WKWebExtension.WindowType {
-        browser?.extensionPopup != nil ? .popup : .normal
+        little != nil || browser?.extensionPopup != nil ? .popup : .normal
     }
     func isPrivate(for context: WKWebExtensionContext) -> Bool { false }
 
@@ -1751,13 +1845,14 @@ final class ExtensionWindow: NSObject, WKWebExtensionWindow {
     func screenFrame(for context: WKWebExtensionContext) -> CGRect { nsWindow?.screen?.frame ?? NSScreen.main?.frame ?? .null }
 
     func focus(for context: WKWebExtensionContext) async throws {
+        if let little { return little.window.makeKeyAndOrderFront(nil) }
         guard let browser else { return }
         Browsers.show(browser)
     }
 
     /// windows.remove.
     func close(for context: WKWebExtensionContext) async throws {
-        browser?.window?.performClose(nil)
+        nsWindow?.performClose(nil)
     }
 
     /// windows.update with a position or size; unset parts come as NaN and

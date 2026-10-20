@@ -26,7 +26,7 @@ from pathlib import Path
 
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 ROOT = Path(__file__).resolve().parents[1]
-APP = str(ROOT / "build" / "Search.app")
+APP = str(ROOT / "build" / "Brauz.app")
 HOME = os.path.expanduser("~")
 def use(name):
     """This checkout's own world for a suite: the name, then a tag made from
@@ -62,7 +62,7 @@ started = set()
 def running(): return set(subprocess.run(["pgrep", "-f", APP + "/Contents/MacOS"], capture_output=True, text=True).stdout.split())
 def holding(): return set(subprocess.run(["lsof", "-t", "--", SOCK], capture_output=True, text=True).stdout.split()) if os.path.exists(SOCK) else set()
 def pids(): return sorted((started & running()) | (holding() & running()))
-WEBKIT = f"{HOME}/Library/WebKit/com.officecommun.search"
+WEBKIT = f"{HOME}/Library/WebKit/dev.aabc.brauz"
 def stores():
     """The WebKit stores this world's runs made, where WebKit keeps them and
     named as the app names them (Store.probeStore, Spaces.store): its
@@ -88,19 +88,21 @@ def stores():
         if id != FIRST_SPACE:
             found.append(f"{WEBKIT}/WebsiteDataStore/{id}")
     return found
-# The real Search's folder, beside whose stores these are removed.
-REAL = f"{HOME}/Library/Application Support/Search"
+# The real Search's and Brauz's folders, beside whose stores these are removed.
+REAL_BRAUZ = f"{HOME}/Library/Application Support/Brauz"
+REAL_SEARCH = f"{HOME}/Library/Application Support/Search"
 FIRST_SPACE = "00000000-0000-0000-0000-000000000001"
 def guarded():
     """Store ids no wipe removes, whatever stores() names: every space of the
-    real Search's own list, and the first space's fixed id. A wrong hash, or
+    real Search's or Brauz's own list, and the first space's fixed id. A wrong hash, or
     a test world's list holding a real space's id, then never reaches a real
     space's sign-ins: rm -rf runs in the folder where those live."""
     ids = {FIRST_SPACE}
-    try:
-        ids |= {str(uuid.UUID(space["id"])) for space in json.load(open(f"{REAL}/spaces.json"))}
-    except (OSError, ValueError, TypeError, KeyError, AttributeError):
-        pass
+    for real_dir in [REAL_BRAUZ, REAL_SEARCH]:
+        try:
+            ids |= {str(uuid.UUID(space["id"])) for space in json.load(open(f"{real_dir}/spaces.json"))}
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            pass
     return ids
 def wipe():
     # The stores first: which spaces had one is in the folder and settings
@@ -128,14 +130,14 @@ def setup(**prefs):
     time.sleep(1); wipe()
     for k in ["bench", "welcomed"]: subprocess.run(["defaults", "write", SUITE, k, "-bool", "true"])
     for k, v in prefs.items(): subprocess.run(["defaults", "write", SUITE, k, "-bool", "true" if v else "false"])
-def launch():
+def launch(settle=2):
     if os.path.exists(SOCK): os.remove(SOCK)
     before = running()
     subprocess.run(["open", "-n", "-g", "-j", "--env", f"SEARCH_PROBE={W}", APP])
     for _ in range(150):
         if os.path.exists(SOCK): break
         time.sleep(0.1)
-    time.sleep(2)
+    time.sleep(settle)
     # Whatever came up from this build just now and holds this world's socket.
     started.update((running() - before) & holding())
 def quit():

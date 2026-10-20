@@ -1,18 +1,18 @@
 import SwiftUI
 
 // A small window for a link from another app: the page, and a thin line over
-// it with the site, Open in Search and nothing else — to read and close, or
+// it with the site, Open in Brauz and nothing else - to read and close, or
 // to keep. Arc calls it Little Arc; the idea came to Search as #227.
 //
 // Off unless asked for, in Settings › General: a link from Mail opens in the
 // browser's window, as it always has, for anyone who hasn't chosen this.
 //
 // The page is a tab of its own, as a peek is (see Peek.swift), only in a
-// window of its own: Open in Search moves it into the browser's row, where
+// window of its own: Open in Brauz moves it into the browser's row, where
 // the space on screen is, loaded as it is and nothing loaded twice.
 //
-// It comes alone. The browser's window stays where it was — closed, in the
-// Dock, behind another app — until Open in Search asks for it (see
+// It comes alone. The browser's window stays where it was - closed, in the
+// Dock, behind another app - until Open in Brauz asks for it (see
 // Links.little).
 
 @MainActor
@@ -22,34 +22,54 @@ final class LittleWindow: NSObject, NSWindowDelegate {
 
     let tab: Tab
     /// The browser it was opened for: the planet for ⌃Tab when no window is in front.
-    private weak var browser: Browser?
-    private let window: NSWindow
+    weak var browser: Browser?
+    let window: NSWindow
+    let address: LittleAddress
     private var kept = false
     /// What it says for a moment at its foot: "Address copied".
     private let note = LittleNote()
+    private var requestGeneration: Int = 0
+
+    /// Read-only space identifier for testing and inspection.
+    var spaceID: UUID { address.spaceID }
 
     /// A link from another app, in a small window in front of it.
-    /// `front: false` makes it without showing it — for the bench, which
+    /// `front: false` makes it without showing it - for the bench, which
     /// must never put a window on screen.
     static func show(_ url: URL, for browser: Browser, front: Bool = true) {
         let tab = Tab(configuration: Web.configuration(space: browser.spaceID))
         browser.prepare(tab)
-        tab.go(to: url)
         let little = LittleWindow(tab: tab, browser: browser)
         open.append(little)
         watchKeys()
-        little.window.center()
+        little.position()
         watch()
-        // Never a test run's in front: a probe started hidden stays off every screen.
-        guard front, !Store.testing else { return }
-        little.window.makeKeyAndOrderFront(nil)
-        if #available(macOS 14, *) { NSApp.activate() } else { NSApp.activate(ignoringOtherApps: true) }
+
+        if #available(macOS 15.4, *) {
+            Extensions.shared.opened(little)
+        }
+
+        if front, !Store.testing {
+            little.window.makeKeyAndOrderFront(nil)
+            if #available(macOS 15.4, *) {
+                Extensions.shared.focused(little)
+            }
+            if #available(macOS 14, *) {
+                NSApp.activate()
+            } else {
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        } else if #available(macOS 15.4, *), little.window.isKeyWindow {
+            Extensions.shared.focused(little)
+        }
+
+        little.navigate(to: url)
     }
 
-    /// The small windows open now, newest last — for the bench.
+    /// The small windows open now, newest last - for the bench.
     static var all: [LittleWindow] { open }
 
-    /// Closed as its button closes it — for the bench.
+    /// Closed as its button closes it - for the bench.
     func close() { window.performClose(nil) }
 
     /// Its window, for the bench to press keys on, and what its foot says.
@@ -65,6 +85,11 @@ final class LittleWindow: NSObject, NSWindowDelegate {
     /// The small window a tab is the page of, if it is one's.
     static func holding(_ id: Tab.ID) -> LittleWindow? {
         open.first { $0.tab.id == id }
+    }
+
+    /// The small window a tab is the page of, if it is one's.
+    static func holding(_ tab: Tab) -> LittleWindow? {
+        holding(tab.id)
     }
 
     /// The small windows' tabs as the Mac stacks their windows, the one in
@@ -88,11 +113,11 @@ final class LittleWindow: NSObject, NSWindowDelegate {
     static let switcher = TabSwitcher()
 
     /// The browser whose tabs are the planet for this gesture: the window
-    /// in front, as Open in Search takes.
+    /// in front, as Open in Brauz takes.
     private(set) static weak var planet: Browser?
 
     /// The last one brought forward on a test run, which never puts one
-    /// on a screen — for the bench.
+    /// on a screen - for the bench.
     private(set) static var fronted: Tab.ID?
 
     /// In front, with the keys, as a click on it would leave it.
@@ -100,6 +125,7 @@ final class LittleWindow: NSObject, NSWindowDelegate {
         guard !Store.testing else { return LittleWindow.fronted = tab.id }
         if window.isMiniaturized { window.deminiaturize(nil) }
         window.makeKeyAndOrderFront(nil)
+        if #available(macOS 15.4, *) { Extensions.shared.focused(self) }
         if #available(macOS 14, *) { NSApp.activate() } else { NSApp.activate(ignoringOtherApps: true) }
     }
 
@@ -141,6 +167,8 @@ final class LittleWindow: NSObject, NSWindowDelegate {
     private init(tab: Tab, browser: Browser) {
         self.tab = tab
         self.browser = browser
+        let address = LittleAddress(spaceID: browser.spaceID, spaces: browser.spaces)
+        self.address = address
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 900, height: 640),
             styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
@@ -153,15 +181,20 @@ final class LittleWindow: NSObject, NSWindowDelegate {
         window.minSize = NSSize(width: 420, height: 320)
         window.delegate = self
         let id = tab.id
-        window.contentView = NSHostingView(rootView: LittleView(tab: tab, note: note, keep: { [weak self] in self?.keep() })
-            .overlay {
-                TabSwitcherOverlay(
-                    switcher: LittleWindow.switcher,
-                    tab: { id in LittleWindow.holding(id)?.tab ?? LittleWindow.planet?.tabs.first { $0.id == id } },
-                    current: id, host: id,
-                    pick: { LittleWindow.commit(picking: $0) }
-                )
-            })
+        window.contentView = NSHostingView(rootView: LittleView(
+            little: self,
+            tab: tab,
+            address: address,
+            note: note,
+            keep: { [weak self] in self?.keep() }
+        ).overlay {
+            TabSwitcherOverlay(
+                switcher: LittleWindow.switcher,
+                tab: { id in LittleWindow.holding(id)?.tab ?? LittleWindow.planet?.tabs.first { $0.id == id } },
+                current: id, host: id,
+                pick: { LittleWindow.commit(picking: $0) }
+            )
+        })
         // Back from the page it opened on is back to before it opened: a
         // swipe closes it (see PageView.leave).
         tab.leave = { [weak self] in self?.close() }
@@ -186,7 +219,7 @@ final class LittleWindow: NSObject, NSWindowDelegate {
 
     /// Its keys, before the browser's: ⌃Tab goes to the other small
     /// windows, ⌘O keeps it, Escape and ⌘W close it, and the page's own
-    /// commands — copying its address, reloading it, zooming it — act on
+    /// commands - copying its address, reloading it, zooming it - act on
     /// this page, on whatever keys Settings › Shortcuts gives them.
     /// Left to the menus, they acted on the browser's tab, in a window
     /// behind this one or none, and said so there if anywhere. Everything
@@ -203,6 +236,13 @@ final class LittleWindow: NSObject, NSWindowDelegate {
             if combo == keys.key(for: "view.zoomIn") { tab.magnify(by: 1.1); return true }
             if combo == keys.key(for: "view.zoomOut") { tab.magnify(by: 1 / 1.1); return true }
             if combo == keys.key(for: "view.actualSize") { tab.resetZoom(); return true }
+            if combo == keys.key(for: "file.openAddress") { startEditing(); return true }
+            let typing = address.editing || event.window?.firstResponder is NSTextView
+            if !typing {
+                if combo == keys.key(for: "tabs.back") { tab.back(); return true }
+                if combo == keys.key(for: "tabs.forward") { tab.forward(); return true }
+            }
+            if combo == keys.key(for: "view.reader") { tab.toggleReader { _ in }; return true }
         }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let key = event.shortcutCharacters
@@ -250,13 +290,36 @@ final class LittleWindow: NSObject, NSWindowDelegate {
             switcher.cancel()
             if event.keyCode == 53 { return true }
         }
-        if event.keyCode == 53 && flags.isEmpty || key == "w" && flags == .command {
+        if event.keyCode == 53 && flags.isEmpty {
+            if address.editing {
+                cancelEditing()
+                return true
+            }
+            window.performClose(nil)
+            return true
+        }
+        if key == "w" && flags == .command {
             window.performClose(nil)
             return true
         }
         if key == "o" && flags == .command {
             keep()
             return true
+        }
+        if key == "l" && flags == .command {
+            startEditing()
+            return true
+        }
+        let typing = address.editing || event.window?.firstResponder is NSTextView
+        if !typing && flags == .command {
+            if key == "[" || event.keyCode == 33 {
+                tab.back()
+                return true
+            }
+            if key == "]" || event.keyCode == 30 {
+                tab.forward()
+                return true
+            }
         }
         return false
     }
@@ -280,6 +343,127 @@ final class LittleWindow: NSObject, NSWindowDelegate {
         }
     }
 
+    /// Navigates this small window to the target URL, using optimistic address
+    /// display before waiting for extensions if initializing.
+    func navigate(to url: URL) {
+        guard !kept, LittleWindow.open.contains(where: { $0 === self }) else { return }
+        requestGeneration += 1
+        let generation = requestGeneration
+        tab.setAddressOptimistically(url)
+
+        let load = { [weak self] in
+            guard let self,
+                  !self.kept,
+                  LittleWindow.open.contains(where: { $0 === self }),
+                  self.requestGeneration == generation
+            else { return }
+            self.tab.go(to: url)
+        }
+
+        if #available(macOS 15.4, *), Extensions.shared.starting {
+            Extensions.shared.whenStarted(within: 1.5) { load() }
+        } else {
+            load()
+        }
+    }
+
+    /// Changes this small window's browsing space and cookie context immediately.
+    func switchSpace(to id: UUID) {
+        guard !kept, LittleWindow.open.contains(where: { $0 === self }) else { return }
+        let currentSpaces = browser?.spaces ?? Spaces.read()
+        guard currentSpaces.contains(where: { $0.id == id }) else { return }
+
+        let fromStore = tab.store
+        let toStore = Spaces.store(for: id)
+        guard id != address.spaceID || fromStore !== toStore else { return }
+
+        // Shared-sign-in spaces can change selected destination without rebuilding identical store or losing form data.
+        if fromStore === toStore {
+            address.spaceID = id
+            tab.rehome(in: id)
+            return
+        }
+
+        requestGeneration += 1
+        let generation = requestGeneration
+        let originalSpaceID = address.spaceID
+        let originalAddress = tab.pageAddress ?? tab.address
+
+        tab.unsaved { [weak self] unsaved in
+            guard let self,
+                  !self.kept,
+                  LittleWindow.open.contains(where: { $0 === self }),
+                  self.requestGeneration == generation,
+                  self.address.spaceID == originalSpaceID,
+                  (self.tab.pageAddress ?? self.tab.address) == originalAddress
+            else { return }
+
+            let spacesNow = self.browser?.spaces ?? Spaces.read()
+            guard let dest = spacesNow.first(where: { $0.id == id }) else { return }
+
+            if unsaved {
+                self.confirmDiscard(
+                    destination: dest,
+                    generation: generation,
+                    originalSpaceID: originalSpaceID,
+                    originalAddress: originalAddress
+                ) { [weak self] in
+                    self?.performSwitch(to: dest.id, generation: generation)
+                }
+            } else {
+                self.performSwitch(to: dest.id, generation: generation)
+            }
+        }
+    }
+
+    private func confirmDiscard(
+        destination: Space,
+        generation: Int,
+        originalSpaceID: UUID,
+        originalAddress: URL?,
+        proceed: @escaping () -> Void
+    ) {
+        if Store.testing {
+            if Ask.testing == true { proceed() }
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "Switch Space?"
+        alert.informativeText = "This page has unsaved form entries. It will reopen in “\(destination.name)” with that Space’s sign-ins, so the entries may be lost."
+        let switchButton = alert.addButton(withTitle: "Switch")
+        switchButton.hasDestructiveAction = true
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            guard let self,
+                  !self.kept,
+                  LittleWindow.open.contains(where: { $0 === self }),
+                  self.requestGeneration == generation,
+                  self.address.spaceID == originalSpaceID,
+                  (self.tab.pageAddress ?? self.tab.address) == originalAddress
+            else { return }
+            let currentSpaces = self.browser?.spaces ?? Spaces.read()
+            guard currentSpaces.contains(where: { $0.id == destination.id }) else { return }
+            proceed()
+        }
+    }
+
+    private func performSwitch(to id: UUID, generation: Int) {
+        guard !kept,
+              LittleWindow.open.contains(where: { $0 === self }),
+              requestGeneration == generation
+        else { return }
+
+        let spacesNow = browser?.spaces ?? Spaces.read()
+        guard spacesNow.contains(where: { $0.id == id }) else { return }
+
+        address.spaceID = id
+        tab.rehome(in: id)
+        if !tab.wake() {
+            if let address = tab.address { tab.go(to: address) }
+        }
+    }
+
     /// Its page's address on the pasteboard, plain or as a Markdown link,
     /// said at the foot of the window as the browser's window says it.
     private func copy(markdown: Bool) {
@@ -289,23 +473,54 @@ final class LittleWindow: NSObject, NSWindowDelegate {
         note.say(markdown ? "Link copied" : "Address copied")
     }
 
+    /// Keeps this tab in the specified destination browser, switching that
+    /// browser to the selected space first and closing this window.
+    func keep(in destination: Browser) {
+        guard !kept, LittleWindow.open.contains(where: { $0 === self }) else { return }
+        let targetSpaceID = address.spaceID
+        guard destination.spaces.contains(where: { $0.id == targetSpaceID }) else {
+            note.say("This space no longer exists. Choose another space.")
+            return
+        }
+        guard destination.prefs.usesSpaces || destination.spaceID == targetSpaceID else {
+            note.say("Turn Spaces on before keeping this tab in another space.")
+            return
+        }
+        guard tab.store === Spaces.store(for: targetSpaceID) else {
+            note.say("Select the space again to update its sign-ins before keeping this tab.")
+            return
+        }
+        if destination.spaceID != targetSpaceID {
+            destination.switchSpace(to: targetSpaceID)
+        }
+        guard destination.spaceID == targetSpaceID else { return }
+
+        requestGeneration += 1
+        kept = true
+        tab.leave = nil
+
+        if #available(macOS 15.4, *) {
+            Extensions.shared.keeping(self)
+        }
+
+        destination.receive(tab)
+        window.close()
+
+        guard let front = destination.window else { return }
+        if front.isMiniaturized { front.deminiaturize(nil) }
+        front.makeKeyAndOrderFront(nil)
+    }
+
     /// Into the browser's row, after the tab on screen (never among the
     /// pins), and in front; the small window goes. The one time a link in
     /// a small window brings the browser's window: the window in front, or
     /// one brought back for it.
     func keep() {
-        let browser = Browsers.ensureWindow()
-        kept = true
-        // In the row, back from the first page goes nowhere, as any tab's.
-        tab.leave = nil
-        // As a tab moved from another window is: this window's delegate,
-        // and this window's space, with its sign-ins.
-        browser.receive(tab)
-        window.close()
-        guard let front = browser.window else { return }
-        // Put away in the Dock, it stayed there (#95).
-        if front.isMiniaturized { front.deminiaturize(nil) }
-        front.makeKeyAndOrderFront(nil)
+        keep(in: Browsers.ensureWindow())
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        if #available(macOS 15.4, *) { Extensions.shared.focused(self) }
     }
 
     /// Stepping away puts the switcher away, and makes this the one ⌃Tab
@@ -317,40 +532,65 @@ final class LittleWindow: NSObject, NSWindowDelegate {
         switcher.left(tab, alive: Set(LittleWindow.open.map(\.tab.id)))
     }
 
+    func windowDidMove(_ notification: Notification) { saveFrame() }
+    func windowDidResize(_ notification: Notification) { saveFrame() }
+
     func windowWillClose(_ notification: Notification) {
         if LittleWindow.switcher.home == tab.id { LittleWindow.switcher.cancel() }
+        saveFrame()
         tab.leave = nil
         if !kept { tab.close() }
+        if #available(macOS 15.4, *) { Extensions.shared.closed(self) }
         LittleWindow.open.removeAll { $0 === self }
     }
 }
 
-/// The page, and the line over it: the site, and Open in Search when there
-/// is somewhere to keep it (an extension's popup window has no such button).
+/// The page, and the line over it: back button, site title or address field,
+/// space menu, and Open in Brauz when there is somewhere to keep it.
 struct LittleView: View {
+    weak var little: LittleWindow?
     @ObservedObject var tab: Tab
-    /// Its window's line at the foot; an extension's popup has none.
+    @ObservedObject var address: LittleAddress
     var note: LittleNote? = nil
     let keep: (() -> Void)?
+
+    init(
+        little: LittleWindow? = nil,
+        tab: Tab,
+        address: LittleAddress? = nil,
+        note: LittleNote? = nil,
+        keep: (() -> Void)? = nil
+    ) {
+        self.little = little
+        self.tab = tab
+        self.address = address ?? little?.address ?? LittleAddress()
+        self.note = note
+        self.keep = keep
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 // Room for the window's own buttons, which sit on this line.
                 Spacer().frame(width: 64)
+                if tab.canGoBack {
+                    Door(icon: "chevron.left", help: "Back   ⌘[") { tab.back() }
+                        .transition(.opacity)
+                }
                 Spacer(minLength: 0)
-                Text(site)
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(Palette.muted)
-                    .lineLimit(1)
+                LittleTitle(little: little, site: site, address: address)
                 Spacer(minLength: 0)
+                if Shared.prefs.usesSpaces, little != nil {
+                    LittleSpaceMenu(little: little, address: address)
+                }
                 if let keep {
-                    Pill("Open in Search", action: keep)
-                        .help("Open in Search   ⌘O")
+                    Pill("Open in Brauz", action: keep)
+                        .help("Open in Brauz   ⌘O")
                 } else {
                     Spacer().frame(width: 64)
                 }
             }
+            .animation(Motion.quick, value: tab.canGoBack)
             .padding(.horizontal, 10)
             .frame(height: 34)
             ZStack {
@@ -370,14 +610,14 @@ struct LittleView: View {
         .ignoresSafeArea()
     }
 
-    /// The page on screen — not one still on its way, which a page can
-    /// start and never finish — named as the site, or as what it is when
+    /// The page on screen - not one still on its way, which a page can
+    /// start and never finish - named as the site, or as what it is when
     /// it isn't a website, and marked when it came over plain http.
     private var site: String {
         guard let url = tab.pageAddress else { return "" }
         switch url.scheme?.lowercased() {
         case "https": return SiteCard.site(url)
-        case "http": return "Not secure — " + SiteCard.site(url)
+        case "http": return "Not secure - " + SiteCard.site(url)
         case "chrome-extension", "webkit-extension": return "Extension page"
         default: return url.absoluteString == "about:blank" ? "" : "Not a website"
         }

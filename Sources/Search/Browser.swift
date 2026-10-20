@@ -4998,7 +4998,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
 
         // The next document gets this site's stylesheet of hidden things,
         // decided here because here is the last moment before it loads.
-        if action.targetFrame?.isMainFrame ?? true, let tab = tab(for: webView) {
+        if action.targetFrame?.isMainFrame ?? true, let tab = anyTab(for: webView) {
             let host = curtain.host(of: url)
             tab.arm(hiding: curtain.css(on: host), to: url)
             // And the blocker, on or off for where it is going.
@@ -5049,11 +5049,11 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         guard let navigation else { return }
-        tab(for: webView)?.extensionReturn.started(navigation, at: webView.url)
+        anyTab(for: webView)?.extensionReturn.started(navigation, at: webView.url)
     }
 
     func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {
-        guard let navigation, let tab = tab(for: webView) else { return }
+        guard let navigation, let tab = anyTab(for: webView) else { return }
         let redirect = tab.extensionReturn.redirected(navigation, to: webView.url)
         guard let redirect, #available(macOS 15.4, *),
               handOverExtensionReturn(Extensions.current(redirect.target), source: redirect.source, from: webView, tab: tab)
@@ -5131,6 +5131,22 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
                 opener.noteBlocked(action.request.url)
                 return nil
             }
+        }
+        let hasPopupFeatures = windowFeatures.width != nil
+            || windowFeatures.height != nil
+            || windowFeatures.toolbarsVisibility?.boolValue == false
+            || windowFeatures.menuBarVisibility?.boolValue == false
+            || windowFeatures.statusBarVisibility?.boolValue == false
+        if let little = LittleWindow.holding(opener.id),
+           action.navigationType == .linkActivated,
+           action.buttonNumber <= 1,
+           action.modifierFlags.intersection([.command, .shift]).isEmpty,
+           !hasPopupFeatures {
+            if clicked { opener.popupGesture.opened(opener.id) }
+            if let url = action.request.url {
+                little.navigate(to: url)
+            }
+            return nil
         }
         let from = opener.id
         // WebKit's copy of the opener's configuration still holds the
@@ -5566,7 +5582,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        tab(for: webView)?.extensionReturn.finished(navigation)
+        anyTab(for: webView)?.extensionReturn.finished(navigation)
         fail(webView, error)
     }
 
@@ -5575,7 +5591,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         didFailProvisionalNavigation navigation: WKNavigation!,
         withError error: Error
     ) {
-        tab(for: webView)?.extensionReturn.finished(navigation)
+        anyTab(for: webView)?.extensionReturn.finished(navigation)
         fail(webView, error)
     }
 
@@ -5608,7 +5624,12 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         popupTab(for: webView)?.popupGesture.clear()
         guard let tab = tab(for: webView) else {
             // A small window's page came: what failed before it is over.
-            littleTab(for: webView)?.failure = nil
+            if let little = littleTab(for: webView) {
+                little.didCommit()
+                little.extensionReturn.finished(navigation)
+                little.failure = nil
+                little.applyRememberedZoom()
+            }
             return
         }
         tab.didCommit()
@@ -5735,7 +5756,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
     /// still loading when you went to another space finishes there, and
     /// still goes into History with its icon.
     func anyTab(for webView: WKWebView) -> Tab? {
-        tab(for: webView) ?? parkedTabs.first { $0.built === webView }
+        tab(for: webView) ?? parkedTabs.first { $0.built === webView } ?? littleTab(for: webView)
     }
 }
 
