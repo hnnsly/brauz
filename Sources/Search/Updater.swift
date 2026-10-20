@@ -53,6 +53,12 @@ final class Updater: ObservableObject {
         Store.testing && ProcessInfo.processInfo.environment["SEARCH_FEED"] != nil
     }
 
+    /// This fork is built from source, and Office Commun's feed would swap
+    /// it for their release of the same app. It never looks at Office
+    /// Commun's feed, except a test run pointed at a feed of its own;
+    /// Brauz looks at its own GitHub releases instead (see BrauzUpdates.swift).
+    private static var looks: Bool { overridden }
+
     struct Release: Equatable {
         let version: String
         let build: Int
@@ -132,6 +138,7 @@ final class Updater: ObservableObject {
     /// checks every time.
     func checkIfDue(then say: @escaping (String) -> Void) {
         self.say = say
+        guard Updater.looks else { BrauzUpdates.shared.start(say: say); return }
         Swap.sweep()
         // And again every hour for as long as the app is up — a browser that
         // is left open for a week would otherwise never look.
@@ -157,6 +164,7 @@ final class Updater: ObservableObject {
     /// Search › Check for Updates…: the result is said in the line at the
     /// foot of the window, and an available update is offered in the menu.
     func checkByHand() {
+        guard Updater.looks else { BrauzUpdates.shared.checkByHand(); return }
         switch stage {
         case .ready(let next):
             say?("Search \(next.version) is ready — relaunch to use it")
@@ -179,6 +187,7 @@ final class Updater: ObservableObject {
     /// names, or nil when this is the latest; what becomes of it after that
     /// is said through the line handed to `checkIfDue`.
     func check(then done: @escaping (Release?) -> Void) {
+        guard Updater.looks else { done(nil); return }
         guard !checking else { return }
         checking = true
         Task { [weak self] in

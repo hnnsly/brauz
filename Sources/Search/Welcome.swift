@@ -65,7 +65,7 @@ struct WelcomePanel: View {
         VStack(spacing: 22) {
             Plate(size: 72)
             VStack(spacing: 10) {
-                Text("Search")
+                Text("Brauz")
                     .font(.system(size: 34, weight: .medium))
                     .foregroundStyle(Palette.ink)
                 Text("A browser with nothing in the way. Four megabytes, the engine already in your Mac, and as little around the page as we could manage.")
@@ -168,12 +168,12 @@ struct WelcomePanel: View {
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark")
                             .font(.system(size: 11, weight: .medium))
-                        Text("Search is the default browser")
+                        Text("Brauz is the default browser")
                     }
                     .font(.system(size: 13))
                     .foregroundStyle(Palette.ink)
                 } else {
-                    Big("Make Search the default", filled: true) {
+                    Big("Make Brauz the default", filled: true) {
                         asked = true
                         Links.becomeDefault { _ in isDefault = Links.isDefault }
                     }
@@ -311,10 +311,10 @@ struct WelcomePanel: View {
     private struct Plate: View {
         let size: CGFloat
         var body: some View {
-            Logomark()
-                .fill(Palette.ink, style: FillStyle(eoFill: true))
-                .aspectRatio(Logomark.canvas.width / Logomark.canvas.height, contentMode: .fit)
-                .frame(height: size * 0.56)
+            BrauzMark()
+                .fill(Palette.ink)
+                .aspectRatio(BrauzMark.size.width / BrauzMark.size.height, contentMode: .fit)
+                .frame(height: size * 0.75)
         }
     }
 

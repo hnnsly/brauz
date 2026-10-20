@@ -37,7 +37,7 @@ struct SearchApp: App {
         // shares, and a probe resized for a test once changed the size the
         // real window came back at. The other windows' frames are in
         // windows.json (see Windows.swift).
-        Window("Search", id: Browsers.sceneID) {
+        Window("Brauz", id: Browsers.sceneID) {
             SceneRoot(slot: SceneSlot.shared)
                 .frame(minWidth: 640, minHeight: 420)
         }

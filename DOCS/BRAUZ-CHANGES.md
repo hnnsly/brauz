@@ -1,0 +1,34 @@
+# What changed in Brauz
+
+Brauz's own changes, newest first. What comes from Search is in `CHANGELOG.md`, which stays exactly as Search has it.
+
+Each section is headed by the tag it ships in, and the release workflow puts that section at the top of the release notes. Write a change under `## Unreleased` when it lands, and rename the heading to the tag (`## v1.0.4-brauz.4`) in the commit you tag.
+
+## Unreleased
+
+- Brauz comes for Apple Silicon Macs only. There is no Brauz-Intel.dmg from this release on.
+- Up to date with upstream/main b2048a0 PLUS later commits, arrow/natural bounce/no reading progress, no early pause and draft max(delay,1h), Little address/Back/placement/spaces/extensions, no automatic profile copy, own daily notices/manual sync, DMG Brauz text.
+
+## v1.0.4-brauz.3
+
+- Coming back to a tab that was paused no longer crashes Brauz. Switching to it, switching spaces with it in view, putting it in Split View, or changing between light and dark could ask the paused page to run a script, and WebKit stopped the app with "The WKWebView is suspended". The tab now wakes before anything asks it something, and its icon is checked again once it is awake.
+- Up to date with Search as of 13 October: Arc's folders and pinned tabs come over in the shape Arc had them, Download Linked File in the right-click menu saves the file, Open Link in New Tab leaves you on the page you were on, websites an extension lists can message it as in Chrome, and more. Search's `CHANGELOG.md` has the full list.
+
+## v1.0.4-brauz.2
+
+- Copy Image takes a moment instead of over a minute on a large picture: it read the picture a byte at a time.
+- A paused tab sleeps, closes and reloads without crashing.
+- Extensions see the small window's page as a tab, so a password manager fills it.
+- Closing an extension's popup leaves nothing behind for ⌘Z to undo.
+
+## v1.0.4-brauz.1
+
+The first release of Brauz.
+
+- Its own name, icon, and data folder, so it runs next to Search without sharing settings, cookies or passwords. On first launch it copies Search's once.
+- Settings › About and Help › Send Feedback point at Brauz's GitHub, and Brauz looks at its GitHub releases once a day to say when a new one is out.
+- Scrolling is WebKit's own, as smooth as in a plain web view.
+- Tabs left alone for a few minutes are paused, so they cost no CPU and come back at once.
+- Shortcuts work with a Russian or any other non-Latin keyboard layout on.
+- The address field takes focus every time on ⌘T and a new blank tab.
+- The small window has an address field and shortcuts of its own, and opens where it was last.

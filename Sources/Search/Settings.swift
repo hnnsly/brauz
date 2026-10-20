@@ -9,7 +9,6 @@ struct SettingsPanel: View {
     @ObservedObject var browser: Browser
     @ObservedObject var prefs: Preferences
 
-    @ObservedObject private var updater = Updater.shared
     @ObservedObject private var shield = Shield.shared
     @State private var isDefault = Links.isDefault
     /// A site shortcut being written, kept out of Preferences until it's saved.
@@ -168,7 +167,7 @@ struct SettingsPanel: View {
         Card {
             Line(
                 "Open links from other apps",
-                isDefault ? "Search is the default browser on this Mac" : "Mail, Slack and the rest still send links elsewhere"
+                isDefault ? "Brauz is the default browser on this Mac" : "Mail, Slack and the rest still send links elsewhere"
             ) {
                 if isDefault {
                     Image(systemName: "checkmark")
@@ -356,7 +355,7 @@ struct SettingsPanel: View {
                 Switch(on: $prefs.floatsAway)
             }
             Rule()
-            Line("Let a script drive Search", "A local socket for testing. Its tabs open beside yours with a flask on them and never take over — see ./bench") {
+            Line("Let a script drive Brauz", "A local socket for testing. Its tabs open beside yours with a flask on them and never take over — see ./bench") {
                 Switch(on: $prefs.bench)
             }
         }
@@ -450,10 +449,6 @@ struct SettingsPanel: View {
                 Switch(on: $prefs.bookmarksBar)
             }
             Rule()
-            Line("Show how far you've read", "The tab you're on fills with grey as you scroll down the page") {
-                Switch(on: $prefs.showsReading)
-            }
-            Rule()
             Line("Sleep tabs you aren't using", "A tab left alone lets its page go and comes back where you left it. Pinned tabs, sound, calls and anything typed stay awake.") {
                 Switch(on: $prefs.sleepsTabs)
             }
@@ -464,7 +459,7 @@ struct SettingsPanel: View {
                 }
             }
             Rule()
-            Line("Close tabs you leave alone", "Counted from when you last left the tab, while Search is quit too. Pin a tab, name it or put it in a group to keep it; private tabs, sound, calls and anything typed stay. ⇧⌘T and History bring one back.") {
+            Line("Close tabs you leave alone", "Counted from when you last left the tab, while Brauz is quit too. Pin a tab, name it or put it in a group to keep it; private tabs, sound, calls and anything typed stay. ⇧⌘T and History bring one back.") {
                 Picker("", selection: $prefs.tabLife) {
                     ForEach(TabLife.allCases) { life in
                         Text(life.title).tag(life)
@@ -505,7 +500,7 @@ struct SettingsPanel: View {
                 Switch(on: $prefs.searchesSites)
             }
             Rule()
-            Line("Start with a fresh window", "Each time Search opens, your pinned tabs are there and last time's other tabs aren't.") {
+            Line("Start with a fresh window", "Each time Brauz opens, your pinned tabs are there and last time's other tabs aren't.") {
                 Switch(on: $prefs.startsFresh)
             }
             Rule()
@@ -529,7 +524,7 @@ struct SettingsPanel: View {
                 }
             }
             Rule()
-            Line("Pins go back home", "As in Arc: a pinned tab closed with ⌘W, or left open when Search quits, comes back at the page it was pinned at rather than wherever you went from there.") {
+            Line("Pins go back home", "As in Arc: a pinned tab closed with ⌘W, or left open when Brauz quits, comes back at the page it was pinned at rather than wherever you went from there.") {
                 Switch(on: $prefs.pinsGoHome)
             }
             Rule()
@@ -548,7 +543,7 @@ struct SettingsPanel: View {
     /// Says so when a password manager extension has taken the saving over.
     private var savingDetail: String {
         if #available(macOS 15.4, *), let name = Extensions.shared.passwordSavingTakenBy {
-            return "\(name) does the saving — it asked Search not to offer"
+            return "\(name) does the saving — it asked Brauz not to offer"
         }
         return "Asked once per site, never again for a site you refuse"
     }
@@ -630,7 +625,7 @@ struct SettingsPanel: View {
                 }
                 if let trouble = shield.trouble {
                     Rule()
-                    Line(trouble, "Nothing is being blocked until this clears — try again, or restart Search") {
+                    Line(trouble, "Nothing is being blocked until this clears — try again, or restart Brauz") {
                         Pill("Try again") { shield.compile() }
                     }
                 }
@@ -681,30 +676,13 @@ struct SettingsPanel: View {
 
     private var about: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 14) {
-                Logomark()
-                    .fill(Palette.ink, style: FillStyle(eoFill: true))
-                    .aspectRatio(Logomark.canvas.width / Logomark.canvas.height, contentMode: .fit)
-                    .frame(height: 34)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Search")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Palette.ink)
-                    Text("by Office Commun · version \(Updater.version)")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Palette.muted)
-                }
-            }
-            .padding(.bottom, 2)
+            BrauzAboutHeader()
+                .padding(.bottom, 2)
 
             Card {
-                Line(versionTitle, versionDetail) { versionControl }
+                BrauzUpdatesLine()
                 Rule()
-                Line("Install updates on its own", "Off, Search still looks every hour and tells you, and installs only when you press Install") {
-                    Switch(on: $prefs.installsUpdates)
-                }
-                Rule()
-                Line("Found something wrong?", "Opens a draft with the version already in it") {
+                Line("Found something wrong?", "Opens a GitHub issue draft with the version already filled in") {
                     Pill("Send Feedback") { Links.writeFeedback() }
                 }
                 Rule()
@@ -738,55 +716,6 @@ struct SettingsPanel: View {
                 Rule()
                 Shortcut("⇧⌘⌫", "Clear browsing data")
             }
-        }
-    }
-
-    /// The version line follows the newer build from found to fetched to
-    /// in place; with none, it is simply this one.
-    private var versionTitle: String {
-        switch updater.stage {
-        case .none: return "Updates"
-        case .fetching(let next): return "Search \(next.version) is downloading…"
-        case .ready(let next): return "Search \(next.version) is ready"
-        case .offered(let next), .waiting(let next): return "Search \(next.version) is out"
-        }
-    }
-
-    private var versionDetail: String {
-        switch updater.stage {
-        case .none:
-            return updater.lastChecked.map { "Checked \($0.formatted(.relative(presentation: .named))) — every hour on its own" }
-                ?? "Checked every hour on its own"
-        case .fetching(let next):
-            return next.notes ?? "Quietly, in the background — nothing you have set is touched"
-        case .ready(let next):
-            return next.notes ?? "It's there the next time you open Search"
-        case .offered(let next):
-            return next.notes ?? "Open the disk image, the same as the first time"
-        case .waiting(let next):
-            return next.notes ?? "Checked and put in place when you press Install"
-        }
-    }
-
-    @ViewBuilder
-    private var versionControl: some View {
-        switch updater.stage {
-        case .none:
-            Pill(updater.checking ? "Checking…" : "Check now") {
-                updater.check { found in
-                    if found == nil { browser.announce("This is the latest one") }
-                }
-            }
-            .disabled(updater.checking)
-        case .fetching:
-            Ring(size: 12)
-        case .ready:
-            Pill("Relaunch now", filled: true) { updater.relaunch() }
-        case .offered:
-            Pill(updater.fetchingDisk ? "Downloading…" : "Download", filled: true) { updater.openDisk() }
-                .disabled(updater.fetchingDisk)
-        case .waiting:
-            Pill("Install", filled: true) { updater.install() }
         }
     }
 

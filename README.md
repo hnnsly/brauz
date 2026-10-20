@@ -1,3 +1,11 @@
+# Brauz
+
+Brauz is a small, fast, quiet web browser for the Mac, built as a fork of [Search](https://github.com/driceroland/Search). Source repository: [hnnsly/brauz](https://github.com/hnnsly/brauz).
+
+**[Download for macOS (Apple Silicon) →](https://github.com/hnnsly/brauz/releases)** · macOS 14 or later · free · open source
+
+---
+
 # Search
 
 A small, fast, quiet web browser for the Mac, by [Office Commun](https://officecommun.com).

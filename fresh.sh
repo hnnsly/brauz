@@ -32,11 +32,11 @@ if [ "${1:-}" != "again" ]; then
   rm -rf "$HOME/Library/Application Support/Search ($WORLD)"
   defaults delete "$SUITE" 2>/dev/null || true
   # Store.probeStore(1), the fixed identifier of the world's website data.
-  rm -rf "$HOME/Library/WebKit/com.officecommun.search/WebsiteDataStore/$STORE"
+  rm -rf "$HOME/Library/WebKit/dev.aabc.brauz/WebsiteDataStore/$STORE"
   echo "world \"$WORLD\" wiped"
 fi
 
-[ -d "build/Search.app" ] || ./build.sh release
+[ -d "build/Brauz.app" ] || ./build.sh release
 
 # A world the bench is going to drive opens hidden. A test run that comes to
 # the front trips the probe's own guard, which hides the app and then refuses
@@ -47,4 +47,4 @@ HIDDEN=""
 if [ "$(defaults read "$SUITE" bench 2>/dev/null || true)" = 1 ]; then
   HIDDEN="-g -j"
 fi
-open -n $HIDDEN --env SEARCH_PROBE="$WORLD" "build/Search.app"
+open -n $HIDDEN --env SEARCH_PROBE="$WORLD" "build/Brauz.app"

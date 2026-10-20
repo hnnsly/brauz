@@ -13,3 +13,8 @@ __pycache__/
 *.provisionprofile
 *.p12
 *.mobileprovision
+
+# Local issues and generated icons
+issues/
+Icon/brauz-dark.png
+Icon/brauz-light.png
