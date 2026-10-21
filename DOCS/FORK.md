@@ -57,6 +57,7 @@ The rest are edits and deletions inside upstream's files and can't move: the scr
 7. The app is Brauz, `dev.aabc.brauz`, with its data in `Application Support/Brauz`, so it never shares settings, cookies or files with Search. No automatic profile copy. The icon is drawn in `Icon/icon.swift`. Names that only exist inside the code stay Search, which keeps saved passwords readable and syncs with upstream simple.
 8. The fork's commits never change `CHANGELOG.md`, which is upstream's. Brauz's own changes go in `DOCS/BRAUZ-CHANGES.md`, under `## Unreleased`.
 9. Little Window ordinary target blank vs JavaScript popups and blocker.
+10. Closing the current ordinary tab selects its surviving split partner first, otherwise the last-viewed surviving tab in the current window and space, then the existing positional neighbor fallback if no history survives. Uses TabSwitcher departure history and Browser.select so sleeping tabs wake. Pinned put-down and last-tab settings stay upstream.
 
 ## Fork-only Tests
 
@@ -66,6 +67,7 @@ The rest are edits and deletions inside upstream's files and can't move: the scr
 - `ImageCopyTests.swift`
 - `PageUndoTests.swift`
 - `BrauzUpdatesTests.swift`
+- `TabCloseTests.swift`
 - `Tests/little_extensions.py`
 - `DOCS/FORK.md`
 
