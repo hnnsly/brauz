@@ -169,6 +169,12 @@ final class TabSwitcher: ObservableObject {
             .prefix(10))
     }
 
+    /// The tab in the row left most recently, if any.
+    func mostRecent(in row: [Tab.ID]) -> Tab.ID? {
+        let valid = Set(row)
+        return recentIDs.first { valid.contains($0) }
+    }
+
     private func begin(home: Tab.ID, planet: [Tab.ID], moons: [Tab.ID], moonsLead: Bool, backwards: Bool) {
         candidates = planet
         self.moons = Array(moons.prefix(Self.maxMoons))

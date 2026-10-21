@@ -3050,11 +3050,13 @@ final class Browser: NSObject, ObservableObject {
         tabs.remove(at: index)
         removeEmptyGroup(tab.groupID)
         if activeID == tab.id {
-            // The neighbour on the right, or the last one if there is no
-            // right — through select(), same as everywhere else you land on
-            // a tab, so one that was never built yet actually wakes up
-            // instead of sitting there blank until a manual reload.
-            select(partner ?? tabs[min(index, tabs.count - 1)])
+            // Split partner first, then the tab viewed latest, then the
+            // neighbour on the right or the last one. Through select(), so one
+            // that was never built yet actually wakes up.
+            let recent = tabSwitcher.mostRecent(in: tabs.map(\.id)).flatMap { id in
+                tabs.first { $0.id == id }
+            }
+            select(partner ?? recent ?? tabs[min(index, tabs.count - 1)])
         }
         rememberSession()
     }
