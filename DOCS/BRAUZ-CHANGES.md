@@ -6,6 +6,8 @@ Each section is headed by the tag it ships in, and the release workflow puts tha
 
 ## Unreleased
 
+- Copy Image reads the picture from the page when it can, instead of downloading it a second time; a picture the page cannot read is fetched as before.
+
 ## v1.0.5.b1
 
 - Up to date with Search v1.0.5 and subsequent upstream commits through b2048a0.
