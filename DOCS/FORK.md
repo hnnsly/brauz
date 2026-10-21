@@ -58,6 +58,7 @@ The rest are edits and deletions inside upstream's files and can't move: the scr
 8. The fork's commits never change `CHANGELOG.md`, which is upstream's. Brauz's own changes go in `DOCS/BRAUZ-CHANGES.md`, under `## Unreleased`.
 9. Little Window ordinary target blank vs JavaScript popups and blocker.
 10. Closing the current ordinary tab selects its surviving split partner first, otherwise the last-viewed surviving tab in the current window and space, then the existing positional neighbor fallback if no history survives. Uses TabSwitcher departure history and Browser.select so sleeping tabs wake. Pinned put-down and last-tab settings stay upstream.
+11. An already open vertical sidebar stays open when the pointer is outside its actual window or over another app; normal auto-hide resumes on return to the page; pending hides recheck eligibility; existing opening/overshoot, explicit controls and horizontal strip are unchanged.
 
 ## Fork-only Tests
 
@@ -68,6 +69,8 @@ The rest are edits and deletions inside upstream's files and can't move: the scr
 - `PageUndoTests.swift`
 - `BrauzUpdatesTests.swift`
 - `TabCloseTests.swift`
+- `FoldPeekTests.swift`
+- `Tests/sidebar_window_exit.py`
 - `Tests/little_extensions.py`
 - `DOCS/FORK.md`
 

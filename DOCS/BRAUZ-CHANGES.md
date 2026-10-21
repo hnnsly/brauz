@@ -6,6 +6,7 @@ Each section is headed by the tag it ships in, and the release workflow puts tha
 
 ## Unreleased
 
+- An open vertical sidebar stays open when the pointer is outside the Brauz window or over another app, and normal auto-hide resumes on return to the page.
 - Closing the current tab returns to the last-viewed tab in the current space, with split partner behavior preserved.
 - Copy Image reads the picture from the page when it can, instead of downloading it a second time; a picture the page cannot read is fetched as before.
 

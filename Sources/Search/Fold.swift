@@ -54,6 +54,36 @@ extension Browser {
     }
 }
 
+/// The delay before the folded column goes back in, and whether the pointer's
+/// position allows it to go.
+@MainActor
+final class FoldHiding {
+    private var pending: DispatchWorkItem?
+
+    static func allowsHide(sidebar: Bool, inWindow: Bool, onWindow: Bool) -> Bool {
+        !sidebar || (inWindow && onWindow)
+    }
+
+    func cancel() {
+        pending?.cancel()
+        pending = nil
+    }
+
+    func schedule(after delay: TimeInterval, canHide: @escaping () -> Bool, hide: @escaping () -> Void) {
+        guard pending == nil else { return }
+        let item = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.pending = nil
+                guard canHide() else { return }
+                hide()
+            }
+        }
+        pending = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+    }
+}
+
 /// Over the window while the column or the strip is folded: the column or
 /// the strip itself while it is out, brought out by the pointer at the
 /// window's chosen side, or its top edge.
@@ -62,7 +92,7 @@ struct Fold: View {
     @ObservedObject var prefs: Preferences
 
     /// The column going back in, a moment after the pointer left it.
-    @State private var leaving: DispatchWorkItem?
+    @State private var leaving = FoldHiding()
     /// The column coming out, once the pointer has settled on the edge.
     @State private var arriving: DispatchWorkItem?
     /// The pointer is over the column.
@@ -240,11 +270,21 @@ struct Fold: View {
         prefs.sidebar && prefs.sidePosition == .right
     }
 
+    private var pointerAllowsHiding: Bool {
+        guard prefs.sidebar else { return true }
+        guard let window = pointer.window else { return false }
+        let screen = NSEvent.mouseLocation
+        let point = window.convertPoint(fromScreen: screen)
+        let size = window.frame.size
+        let inWindow = point.x >= 0 && point.x < size.width && point.y >= 0 && point.y < size.height
+        let onWindow = NSWindow.windowNumber(at: screen, belowWindowWithWindowNumber: 0) == window.windowNumber
+        return FoldHiding.allowsHide(sidebar: true, inWindow: inWindow, onWindow: onWindow)
+    }
+
     private func resetPending() {
         arriving?.cancel()
         arriving = nil
-        leaving?.cancel()
-        leaving = nil
+        leaving.cancel()
         inside = false
     }
 
@@ -342,21 +382,19 @@ struct Fold: View {
     /// counted from when it left rather than from its latest move.
     private func peek(_ out: Bool) {
         if out {
-            if let leaving {
-                leaving.cancel()
-                self.leaving = nil
-            }
+            leaving.cancel()
             guard !browser.peeking else { return }
             browser.peek(true)
         } else {
-            guard leaving == nil else { return }
-            let going = DispatchWorkItem {
-                leaving = nil
-                guard browser.editingTab == nil, !holding else { return }
+            guard pointerAllowsHiding else {
+                leaving.cancel()
+                return
+            }
+            leaving.schedule(after: Fold.grace) {
+                browser.editingTab == nil && !holding && pointerAllowsHiding
+            } hide: {
                 browser.peek(false)
             }
-            leaving = going
-            DispatchQueue.main.asyncAfter(deadline: .now() + Fold.grace, execute: going)
         }
     }
 
