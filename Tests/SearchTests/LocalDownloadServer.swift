@@ -1,5 +1,8 @@
+import CoreGraphics
 import Darwin
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 
 /// A loopback-only HTTP origin for WebKit download tests. It supports byte
 /// ranges and can deliberately truncate one response to exercise retry paths.
@@ -19,7 +22,9 @@ final class LocalDownloadServer {
     private var stopped = false
     private let cancelTransferGate = DispatchSemaphore(value: 0)
     private let payload: Data
+    let picture: Data
     let port: UInt16
+    private var _crossOriginPicture: URL?
 
     private let acceptQueue = DispatchQueue(label: "search.download-fixture.accept")
     private let clientsQueue = DispatchQueue(label: "search.download-fixture.clients", attributes: .concurrent)
@@ -28,6 +33,7 @@ final class LocalDownloadServer {
         payload = Data((0..<size).map { index in
             UInt8(truncatingIfNeeded: (index &* 31) ^ (index >> 8) ^ (index >> 17))
         })
+        picture = Self.makePicture()
 
         let server = Darwin.socket(AF_INET, SOCK_STREAM, 0)
         guard server >= 0 else { throw Self.socketError("socket") }
@@ -74,6 +80,19 @@ final class LocalDownloadServer {
     deinit { stop() }
 
     var baseURL: URL { URL(string: "http://127.0.0.1:\(port)")! }
+
+    var crossOriginPicture: URL? {
+        get {
+            requestsLock.lock()
+            defer { requestsLock.unlock() }
+            return _crossOriginPicture
+        }
+        set {
+            requestsLock.lock()
+            defer { requestsLock.unlock() }
+            _crossOriginPicture = newValue
+        }
+    }
 
     func url(_ path: String) -> URL {
         baseURL.appendingPathComponent(String(path.drop(while: { $0 == "/" })))
@@ -235,6 +254,104 @@ final class LocalDownloadServer {
             return
         }
 
+        if request.path == "/pic-page" {
+            let body = Data("<!doctype html><html><body><img id=\"p\" src=\"/pic-cacheable.png\"></body></html>".utf8)
+            let headers = "HTTP/1.1 200 OK\r\n"
+                + "Content-Type: text/html; charset=utf-8\r\n"
+                + "Content-Length: \(body.count)\r\n"
+                + "Connection: close\r\n\r\n"
+            if sendAll(client, Data(headers.utf8)), sendAll(client, body) {
+                requestsLock.lock()
+                completedPaths.append(request.path)
+                requestsLock.unlock()
+            }
+            return
+        }
+
+        if request.path == "/pic-page-nostore" {
+            let body = Data("<!doctype html><html><body><img id=\"p\" src=\"/pic-nostore.png\"></body></html>".utf8)
+            let headers = "HTTP/1.1 200 OK\r\n"
+                + "Content-Type: text/html; charset=utf-8\r\n"
+                + "Content-Length: \(body.count)\r\n"
+                + "Connection: close\r\n\r\n"
+            if sendAll(client, Data(headers.utf8)), sendAll(client, body) {
+                requestsLock.lock()
+                completedPaths.append(request.path)
+                requestsLock.unlock()
+            }
+            return
+        }
+
+        if request.path == "/pic-page-cross" {
+            let target = crossOriginPicture?.absoluteString ?? ""
+            let body = Data("<!doctype html><html><body><img id=\"p\" src=\"\(target)\"></body></html>".utf8)
+            let headers = "HTTP/1.1 200 OK\r\n"
+                + "Content-Type: text/html; charset=utf-8\r\n"
+                + "Content-Length: \(body.count)\r\n"
+                + "Connection: close\r\n\r\n"
+            if sendAll(client, Data(headers.utf8)), sendAll(client, body) {
+                requestsLock.lock()
+                completedPaths.append(request.path)
+                requestsLock.unlock()
+            }
+            return
+        }
+
+        if request.path == "/pic-cacheable.png" {
+            let headers = "HTTP/1.1 200 OK\r\n"
+                + "Content-Type: image/png\r\n"
+                + "Cache-Control: public, max-age=3600\r\n"
+                + "ETag: \"pic-v1\"\r\n"
+                + "Content-Length: \(picture.count)\r\n"
+                + "Connection: close\r\n\r\n"
+            if sendAll(client, Data(headers.utf8)), sendAll(client, picture) {
+                requestsLock.lock()
+                completedPaths.append(request.path)
+                requestsLock.unlock()
+            }
+            return
+        }
+
+        if request.path == "/pic-nostore.png" {
+            let headers = "HTTP/1.1 200 OK\r\n"
+                + "Content-Type: image/png\r\n"
+                + "Cache-Control: no-store\r\n"
+                + "Content-Length: \(picture.count)\r\n"
+                + "Connection: close\r\n\r\n"
+            if sendAll(client, Data(headers.utf8)), sendAll(client, picture) {
+                requestsLock.lock()
+                completedPaths.append(request.path)
+                requestsLock.unlock()
+            }
+            return
+        }
+
+        if request.path == "/pic-big.bin" {
+            let headers = "HTTP/1.1 200 OK\r\n"
+                + "Content-Type: application/octet-stream\r\n"
+                + "Cache-Control: public, max-age=3600\r\n"
+                + "Content-Length: \(payload.count)\r\n"
+                + "Connection: close\r\n\r\n"
+            guard sendAll(client, Data(headers.utf8)) else { return }
+            var sent = 0
+            while sent < payload.count {
+                requestsLock.lock()
+                let shouldStop = stopped
+                requestsLock.unlock()
+                guard !shouldStop else { return }
+                let next = min(sent + 16 * 1024, payload.count)
+                guard sendAll(client, payload.subdata(in: sent..<next)) else { return }
+                requestsLock.lock()
+                pathBytesSent[request.path, default: 0] += next - sent
+                requestsLock.unlock()
+                sent = next
+            }
+            requestsLock.lock()
+            completedPaths.append(request.path)
+            requestsLock.unlock()
+            return
+        }
+
         let start = Self.rangeStart(request.range)
         let lower = min(max(0, start), payload.count)
         let status = start > 0 ? "206 Partial Content" : "200 OK"
@@ -317,6 +434,49 @@ final class LocalDownloadServer {
             }
             return true
         }
+    }
+
+    static func makePicture() -> Data {
+        let width = 96
+        let height = 96
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo
+        ) else {
+            return Data()
+        }
+
+        for y in 0..<height {
+            for x in 0..<width {
+                let r = CGFloat(x) / CGFloat(width)
+                let g = CGFloat(y) / CGFloat(height)
+                let noise = CGFloat(((x &* 31) ^ (y &* 73)) & 0x1f) / 255.0
+                let b = min(1.0, max(0.0, CGFloat((x + y) % 256) / 255.0 + noise))
+                context.setFillColor(red: r, green: g, blue: b, alpha: 1.0)
+                context.fill(CGRect(x: x, y: y, width: 1, height: 1))
+            }
+        }
+
+        guard let image = context.makeImage() else { return Data() }
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            data as CFMutableData,
+            UTType.png.identifier as CFString,
+            1,
+            nil
+        ) else {
+            return Data()
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { return Data() }
+        return data as Data
     }
 
     private static func rangeStart(_ header: String?) -> Int {

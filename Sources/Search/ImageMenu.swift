@@ -79,8 +79,12 @@ final class ImageRelay: NSObject, WKScriptMessageHandler {
 }
 
 extension Browser {
-    /// For Copy Image: no cookies at all — not kept, not sent, not shared
-    /// between a normal tab's copy and a private one's — nothing cached.
+    /// For Copy Image fallback: no cookies at all, not kept, not sent, not
+    /// shared between a normal tab's copy and a private one's, and nothing
+    /// cached. The page read is the tab's own request, made in its own store
+    /// (a private tab's stays in its non-persistent store), carrying only the
+    /// cookies the page itself would send to that address; a copy is still
+    /// not a visit.
     static let fetcher: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieStorage = nil
@@ -94,7 +98,7 @@ extension Browser {
     /// The most a copied picture may weigh, and the most pixels it may
     /// unpack to: a small file can claim to be enormous, and it is this
     /// process that would decode it.
-    private static let largestImage = 50_000_000
+    static let largestImage = 50_000_000
     private static let mostPixels = 100_000_000
 
     /// The menu itself, popped where the pointer already is — the click that
@@ -143,32 +147,48 @@ extension Browser {
         }
     }
 
-    /// The picture's bytes. Fetched without a cache on disk: it may be a
-    /// private tab's, and a copy is not a visit. A blob: picture — the ones
-    /// WhatsApp Web shows — exists only inside the page that made it, where
-    /// no URLSession can reach: it is read there, in Search's own world, in
-    /// the frame it was right-clicked in (idea 179).
+    /// The picture's bytes. An http(s) picture is read from inside the page
+    /// first, using WebKit's cache when available; if that fails or cannot
+    /// read it, it falls back to a network fetch. A blob: picture, such as
+    /// the ones WhatsApp Web shows, exists only inside the page that made it,
+    /// where no URLSession can reach: it is read there, in Search's own
+    /// world, in the frame it was right-clicked in (idea 179).
     func imageData(at url: URL, in tab: Tab) async -> Data? {
-        guard url.scheme?.lowercased() == "blob" else {
-            return await BoundedImageFetcher.fetch(url: url, limit: Browser.largestImage)
+        if url.scheme?.lowercased() == "blob" {
+            guard let web = tab.built else { return nil }
+            let read = """
+            const found = await fetch(src);
+            const blob = await found.blob();
+            if (!blob.type.startsWith("image/") || blob.size > 50000000) return null;
+            const bytes = new Uint8Array(await blob.arrayBuffer());
+            let text = "";
+            for (let i = 0; i < bytes.length; i += 32768) text += String.fromCharCode.apply(null, bytes.subarray(i, i + 32768));
+            return btoa(text);
+            """
+            let frame = tab.imageFrame
+            let answer: Any? = await withCheckedContinuation { done in
+                web.callAsyncJavaScript(read, arguments: ["src": url.absoluteString], in: frame, in: Web.world) { result in
+                    done.resume(returning: try? result.get())
+                }
+            }
+            return (answer as? String).flatMap { Data(base64Encoded: $0) }
         }
-        guard let web = tab.built else { return nil }
-        let read = """
-        const found = await fetch(src);
-        const blob = await found.blob();
-        if (!blob.type.startsWith("image/") || blob.size > 50000000) return null;
-        const bytes = new Uint8Array(await blob.arrayBuffer());
-        let text = "";
-        for (let i = 0; i < bytes.length; i += 32768) text += String.fromCharCode.apply(null, bytes.subarray(i, i + 32768));
-        return btoa(text);
-        """
-        let frame = tab.imageFrame
-        let answer: Any? = await withCheckedContinuation { done in
-            web.callAsyncJavaScript(read, arguments: ["src": url.absoluteString], in: frame, in: Web.world) { result in
-                done.resume(returning: try? result.get())
+        let scheme = url.scheme?.lowercased() ?? ""
+        if (scheme == "http" || scheme == "https"), tab.built != nil, !tab.asleep {
+            if Task.isCancelled { return nil }
+            if let data = await readInPage(url, in: tab) {
+                return data
             }
         }
-        return (answer as? String).flatMap { Data(base64Encoded: $0) }
+        if Task.isCancelled { return nil }
+        return await BoundedImageFetcher.fetch(url: url, limit: Browser.largestImage)
+    }
+
+    /// Reads an image from inside the page context, using WebKit's memory and
+    /// disk cache for already-loaded resources.
+    func readInPage(_ url: URL, in tab: Tab) async -> Data? {
+        guard let web = tab.built, !tab.asleep else { return nil }
+        return await PageImageReader.read(url: url, frame: tab.imageFrame, in: web)
     }
 
     /// A picture this process may decode: one of its frames at most
@@ -348,5 +368,91 @@ private final class BoundedImageFetcher: NSObject, URLSessionDataDelegate, @unch
             lock.unlock()
             complete(with: result)
         }
+    }
+}
+
+/// Reads an image from inside the page using the page's own fetch and cache.
+/// There is no timeout: a picture the cache lacks is simply downloaded here,
+/// and cutting that off to download it again would only double the wait. A
+/// page that goes away answers with an error, which falls back to the network
+/// fetch; task cancellation ends the wait, and a later answer is ignored.
+private final class PageImageReader: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Data?, Never>?
+    private var hasCompleted = false
+
+    @MainActor
+    static func read(url: URL, frame: WKFrameInfo?, in web: PageView) async -> Data? {
+        let reader = PageImageReader()
+        return await reader.start(url: url, frame: frame, in: web)
+    }
+
+    @MainActor
+    private func start(url: URL, frame: WKFrameInfo?, in web: PageView) async -> Data? {
+        if Task.isCancelled { return nil }
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { cont in
+                lock.lock()
+                if hasCompleted {
+                    lock.unlock()
+                    cont.resume(returning: nil)
+                    return
+                }
+                self.continuation = cont
+                lock.unlock()
+
+                let script = """
+                let response;
+                try { response = await fetch(src, { cache: "force-cache", credentials: "same-origin" }); } catch (e) { return null; }
+                if (!response.ok || !response.body) return null;
+                const declared = Number(response.headers.get("content-length"));
+                if (declared > limit) { try { await response.body.cancel(); } catch (e) {} return null; }
+                const reader = response.body.getReader();
+                const chunks = []; let total = 0;
+                for (;;) {
+                  const step = await reader.read();
+                  if (step.done) break;
+                  total += step.value.length;
+                  if (total > limit) { try { await reader.cancel(); } catch (e) {} return null; }
+                  chunks.push(step.value);
+                }
+                const bytes = new Uint8Array(total); let at = 0;
+                for (const chunk of chunks) { bytes.set(chunk, at); at += chunk.length; }
+                let text = "";
+                for (let i = 0; i < bytes.length; i += 32768) text += String.fromCharCode.apply(null, bytes.subarray(i, i + 32768));
+                return btoa(text);
+                """
+
+                web.callAsyncJavaScript(
+                    script,
+                    arguments: ["src": url.absoluteString, "limit": Browser.largestImage],
+                    in: frame,
+                    in: Web.world
+                ) { [weak self] result in
+                    let data = ((try? result.get()) as? String).flatMap { Data(base64Encoded: $0) }
+                    self?.complete(with: data)
+                }
+            }
+        } onCancel: {
+            self.cancel()
+        }
+    }
+
+    private func cancel() {
+        complete(with: nil)
+    }
+
+    private func complete(with result: Data?) {
+        lock.lock()
+        guard !hasCompleted else {
+            lock.unlock()
+            return
+        }
+        hasCompleted = true
+        let cont = continuation
+        continuation = nil
+        lock.unlock()
+
+        cont?.resume(returning: result)
     }
 }
