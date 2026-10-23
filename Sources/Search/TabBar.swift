@@ -579,15 +579,16 @@ private struct TabPill: View {
                         // letter or icon comes back once it is there.
                         Ring(size: 11)
                     } else if prefs.glyph == .icons, let icon = tab.icon {
-                        Mark(icon: icon, letter: tab.pin ?? "", size: 16, dim: tab.asleep)
+                        Mark(icon: icon, letter: tab.pin ?? "", size: 16)
                     } else {
                         Text(tab.pin ?? "")
                             .font(.system(size: 12, weight: .medium))
                             // A pin holding no page is still there and still
                             // yours; it just isn't costing anything.
-                            .foregroundStyle(colour.opacity(tab.asleep ? 0.45 : 1))
+                            .foregroundStyle(colour)
                     }
                 }
+                .pinGlyphStyle(asleep: tab.asleep)
                 .frame(width: 16, height: 16)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 6)

@@ -625,13 +625,14 @@ private struct PinSquare: View {
                 // Its page on the way, as a row's ring says.
                 Ring(size: scale * 11 / 34)
             } else if prefs.glyph == .icons, let icon = tab.icon {
-                Mark(icon: icon, letter: tab.pin ?? "", size: scale * 16 / 34, dim: tab.asleep)
+                Mark(icon: icon, letter: tab.pin ?? "", size: scale * 16 / 34)
             } else {
                 Text(tab.pin ?? "")
                     .font(.system(size: scale * 12 / 34, weight: .medium))
-                    .foregroundStyle((live ? Palette.ink : Palette.muted).opacity(tab.asleep ? 0.45 : 1))
+                    .foregroundStyle(live ? Palette.ink : Palette.muted)
             }
         }
+        .pinGlyphStyle(asleep: tab.asleep)
         .frame(width: scale * 16 / 34, height: scale * 16 / 34)
         .frame(width: width, height: height)
         .background {
