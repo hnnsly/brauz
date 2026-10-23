@@ -14,7 +14,6 @@ __pycache__/
 *.p12
 *.mobileprovision
 
-# Local issues and generated icons
-issues/
+# Local scratch issues
 Icon/brauz-dark.png
 Icon/brauz-light.png
