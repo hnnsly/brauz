@@ -16,7 +16,7 @@ Match the report's UUID with `dwarfdump --uuid` on `/Applications/Brauz.app` and
 
 ## Issues
 
-The work list is `issues/`, one Markdown file per issue, gitignored: it stays on this Mac. Copy one to GitHub issues on `hnnsly/brauz` only when the user asks.
+The work list is `DOCS/issues/`, one Markdown file per issue, tracked in git so it is shared across machines. Copy one to GitHub issues on `hnnsly/brauz` only when the user asks.
 
 Name a file `NNNN-short-slug.md`, numbered one past the highest. Its shape:
 
@@ -54,7 +54,7 @@ Written at the end: how to start, one "do X, expect Y" per check, what no test c
 
 `status: idea` marks a thought that was grilled and saved without code.
 
-Write findings into the file as they come, not at the end: hypotheses ruled out, measurements, decisions the user made. A fixed issue keeps its file with `status: fixed`; `grep -l "status: open" issues/*` is the open work.
+Write findings into the file as they come, not at the end: hypotheses ruled out, measurements, decisions the user made. A fixed issue keeps its file with `status: fixed`; `grep -l "status: open" DOCS/issues/*` is the open work.
 
 ## How we work
 
