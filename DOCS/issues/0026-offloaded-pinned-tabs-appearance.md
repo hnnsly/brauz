@@ -2,29 +2,40 @@
 status: open
 found: 2026-10-23
 ---
-# Fix visual appearance of offloaded Arc-like pinned tabs (transparently darkened artifact)
+# Sleeping pinned tabs keep full opacity and desaturate instead of dimming
 
 ## Symptom
-Pinned tabs look strange and transparently darkened when offloaded or put to rest, differing from active pinned tabs.
+Sleeping pinned tabs appear muddy and semi-transparent in dark mode because upstream applies 45% opacity over a dark background tile.
 
 ## Loop
-`DEVELOPER_DIR=/Volumes/pet30-a/apps/xcode/Xcode.app/Contents/Developer swift test --filter Pin`
+`python3 Tests/pin_appearance.py` (manual inspection of Brauz.app screenshot via bench socket)
 
 ## Cause
-Opacity or overlay styling applied to sleeping/offloaded pin cells in `Side.swift` / `TabBar.swift` over-darkens or creates unwanted transparency effects.
+When `tab.asleep` is true, `PinSquare` (`Sources/Search/Side.swift:628`) and `TabPill` (`Sources/Search/TabBar.swift:582`) pass `dim: true` to `Mark` (`Sources/Search/Icons.swift:349`), applying 45% opacity to the favicon or letter. Over dark sidebar tiles (`Palette.sideTile`, `Sources/Search/Design.swift:56`), this transparency lets the dark background bleed through. Listed pin rows (`SideRow`, `Sources/Search/Side.swift:715`) do not dim, creating visual inconsistency.
+Ranked hypotheses:
+1. Upstream opacity reduction causes dark background bleed-through on favicons. (Confirmed by code inspection and grep).
+2. Inconsistency with listed sidebar rows makes the dimming look like a rendering artifact. (Confirmed).
+Ruled out / wrong in the first draft:
+- Adjusting CSS or background overlays (there is no CSS, app is SwiftUI).
+- Running XCTest filters for pin appearance (no visual tests exist).
+
+## Decisions (2026-10-24)
+A sleeping pinned tab keeps full opacity and is desaturated (greyscale icon or letter) instead of upstream's 45% opacity (`Icons.swift:349`, `Side.swift:632`, `TabBar.swift:588`, upstream commit c3b3c66).
+Not chosen: no dimming, lighter dim, leaving upstream.
 
 ## Fix
-Adjust CSS/SwiftUI opacity and background modifiers for offloaded pin cells.
+Update `Mark` in `Sources/Search/Icons.swift` (or the call sites in `Side.swift` and `TabBar.swift`) to apply a greyscale/desaturation filter instead of 45% opacity when sleeping, preserving 100% icon opacity.
 
 ## Guarded by
-Pin visual representation tests.
+Manual visual inspection of sleeping pinned tabs.
 
 ## Acceptance
-- Offloaded pinned tabs maintain a clean, consistent appearance without weird transparent darkening.
+- Sleeping pinned tabs remain fully opaque and desaturated in both light and dark modes.
 
 ## Files
+- `Sources/Search/Icons.swift`
 - `Sources/Search/Side.swift`
 - `Sources/Search/TabBar.swift`
 
 ## Test by hand
-Pin tabs, let them offload/sleep, check their visual styling in the sidebar/strip.
+Pin a tab, let it sleep, verify the icon is desaturated and fully opaque without muddy background bleed-through.

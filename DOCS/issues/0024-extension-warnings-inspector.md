@@ -2,29 +2,42 @@
 status: open
 found: 2026-10-23
 ---
-# Expose extension warning and error details in the extensions panel
+# Clickable warning count on extension row opens diagnostics sheet with WebKit and runtime error logs
 
 ## Symptom
-The extensions tab or panel sometimes displays a vague "1 warning" indicator, but provides no way to view the actual warning, error messages, or logs from the extension.
+The extensions row in Settings > Extensions displays a warning count subtitle, but provides no way to view the actual warning or error details.
 
 ## Loop
-`DEVELOPER_DIR=/Volumes/pet30-a/apps/xcode/Xcode.app/Contents/Developer swift test --filter Extension`
+`python3 Tests/extension_warnings.py` driving build/Brauz.app via the bench socket.
 
 ## Cause
-Extension error/warning reporting delegates or storage in `Extensions.swift` do not expose diagnostic logs to the UI view.
+`ExtensionsUI.swift:223` formats the warning count using `context?.errors.count`, but the subtitle is rendered as plain text without any click interaction. Furthermore, `Extensions.shared.errors` (holding runtime script crashes and shims) and WebKit's `WKWebExtensionContext.errors` are maintained in separate structures, so runtime errors do not contribute to the row warning indicator.
+Ranked hypotheses:
+1. Missing UI interactivity: Subtitle warning text is plain unclickable Text. (Confirmed)
+2. Data source split: WKWebExtensionContext errors and runtime script errors in `Extensions.errors` are not unified in the warning count. (Confirmed)
+
+Ruled out / wrong in the first draft:
+- Tooltips (`.help`) were considered, but tooltips cannot display multiline stack traces or support text selection and copying.
+
+## Decisions (2026-10-24)
+- The "N warnings" text on the extension row in Settings > Extensions becomes clickable and opens a sheet listing both WebKit's context errors and the runtime errors `Extensions.swift` already collects, with a Copy button.
+- New UI in a fork-only file (`Sources/Search/ExtensionDiagnostics.swift`), with one hook in `ExtensionsUI.swift`.
+- Not chosen: tooltips or context menu items alone, because users need to easily inspect and copy multi-line error traces.
 
 ## Fix
-Capture and display extension console/diagnostic warnings and errors in the extension settings sheet or inspector.
+Make the warning text clickable in `ExtensionsUI.swift`, presenting a sheet powered by a new fork-only `ExtensionDiagnostics.swift` view that displays unified WebKit context errors and runtime script logs along with a Copy button.
 
 ## Guarded by
-Extension diagnostics tests.
+`Tests/extension_warnings.py` bench probe.
 
 ## Acceptance
-- Users can click or inspect extension warnings/errors to view detailed diagnostic messages.
+- The warning count on the extension row is clickable.
+- Clicking it opens a diagnostic sheet listing both WebKit context errors and runtime errors.
+- A Copy button allows copying the diagnostics to the clipboard.
 
 ## Files
-- `Sources/Search/ExtensionShims.swift`
-- `Sources/Search/Settings.swift`
+- `Sources/Search/ExtensionsUI.swift`
+- `Sources/Search/ExtensionDiagnostics.swift`
 
 ## Test by hand
-Load an extension with a warning/error, inspect the extensions panel/settings to view details.
+Load an extension with errors, open Settings > Extensions, click the warning count text, and verify the diagnostic sheet and Copy button function correctly.
