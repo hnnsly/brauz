@@ -1,14 +1,14 @@
 ---
-status: open
+status: fixing
 found: 2026-10-23
 ---
-# Copy Clean Link
+# Copy Clean Link: drop tracking query parameters on copied and shared links
 
 ## Symptom
 When copying a link via Command-Shift-C or menus, the URL includes tracking parameters like utm_source, utm_medium, fbclid, gclid, yclid, and mc_eid, cluttering shared links.
 
 ## Loop
-DEVELOPER_DIR=/Volumes/pet30-a/apps/xcode/Xcode.app/Contents/Developer swift test --filter AddressTests
+`DEVELOPER_DIR=/Volumes/pet30-a/apps/xcode/Xcode.app/Contents/Developer swift test --filter CleanLinkTests`
 
 ## Cause
 Browser.copyAddress in Sources/Search/Browser.swift:1522 copies url.absoluteString directly without filtering query parameters.
@@ -23,20 +23,34 @@ Browser.copyAddress in Sources/Search/Browser.swift:1522 copies url.absoluteStri
 - A Settings switch turns cleaning off; it is on by default.
 
 ## Fix
-Implement URL parameter cleaning in copyAddress (Sources/Search/Browser.swift:1522) to strip tracking query parameters when enabled.
+Added fork-only `CleanLink.swift` that strips tracking query parameters (`utm_*` prefix, `fbclid`, `gclid`, `dclid`, `gbraid`, `wbraid`, `msclkid`, `yclid`, `ysclid`, `mc_eid`, `mc_cid`, `igshid`, `_hsenc`, `_hsmi`, and `si` on YouTube and Spotify hosts) while keeping other parameters, encoded values, order, and fragments. Hooked `Browser.copyAddress`, `Browser.copyMarkdownLink`, `Browser.selectedTabLinks`, `Sharing.share`, `Little.copy`, `ImageMenu`, and WebKit's context menu `Copy Link`. Added a toggle switch in Settings › Privacy (`cleanLinks`, on by default).
 
 ## Guarded by
-AddressTests verifying clean URL generation.
+`Tests/SearchTests/CleanLinkTests.swift`
 
 ## Acceptance
-- Command-Shift-C copies URL without tracking query parameters.
-- Address bar retains the full original URL.
-- Settings toggle turns cleaning on and off.
+- Command-Shift-C drops tracking parameters and keeps legitimate parameters and fragments.
+- Copy as Markdown Link formats a clean URL.
+- File › Share… sends a clean URL.
+- Little Window Command-Shift-C and Markdown copy produce clean URLs.
+- Copy Link in page context menu places a clean URL on the clipboard.
+- Settings › Privacy toggle turns cleaning off when switched off.
+- Address bar and navigation URLs remain untouched.
 
 ## Files
-- Sources/Search/Browser.swift
-- Sources/Search/Settings.swift
-- Sources/Search/Prefs.swift
+- `Sources/Search/CleanLink.swift`
+- `Sources/Search/Browser.swift`
+- `Sources/Search/ImageMenu.swift`
+- `Sources/Search/Little.swift`
+- `Sources/Search/Prefs.swift`
+- `Sources/Search/Settings.swift`
+- `Sources/Search/Sharing.swift`
+- `Sources/Search/Tab.swift`
+- `Tests/SearchTests/CleanLinkTests.swift`
 
 ## Test by hand
-Open a URL with utm_source=twitter, press Command-Shift-C, paste into text editor and verify utm parameters are stripped.
+1. Run `./build.sh` and open `build/Brauz.app`.
+2. Navigate to `https://example.com/test?utm_source=twitter&foo=bar#section1`.
+3. Press Command-Shift-C and paste into TextEdit; expect `https://example.com/test?foo=bar#section1`.
+4. Right-click the tab and choose Copy as Markdown Link; expect `[test](https://example.com/test?foo=bar#section1)`.
+5. Open Settings › Privacy, turn off "Copy clean links", press Command-Shift-C again; expect the original URL with `utm_source` intact.

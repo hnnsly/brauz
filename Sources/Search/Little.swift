@@ -467,7 +467,8 @@ final class LittleWindow: NSObject, NSWindowDelegate {
     /// Its page's address on the pasteboard, plain or as a Markdown link,
     /// said at the foot of the window as the browser's window says it.
     private func copy(markdown: Bool) {
-        guard let url = tab.address else { return }
+        guard let rawURL = tab.address else { return }
+        let url = CleanLink.cleanIfEnabled(rawURL)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(markdown ? Browser.markdownLink(tab.label, url) : url.absoluteString, forType: .string)
         note.say(markdown ? "Link copied" : "Address copied")

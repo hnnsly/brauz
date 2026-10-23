@@ -1644,6 +1644,11 @@ final class PageView: WKWebView {
             item.target = self
             item.action = #selector(openLinkBehind(_:))
         }
+        if let item = menu.items.first(where: { $0.identifier?.rawValue == "WKMenuItemIdentifierCopyLink" || $0.title == "Copy Link" }) {
+            copyLink = (item.target, item.action)
+            item.target = self
+            item.action = #selector(copyLinkClean(_:))
+        }
         // The bench's linkmenu: the item it names is chosen as the menu
         // comes up, the way a hand would choose it, and the menu goes.
         if Store.testing, let title = PageView.picking {
@@ -1714,6 +1719,14 @@ final class PageView: WKWebView {
     func takeBehind() -> Bool {
         defer { behindSince = nil }
         return behindSince.map { Date().timeIntervalSince($0) < 1 } ?? false
+    }
+
+    private var copyLink: (target: AnyObject?, action: Selector?) = (nil, nil)
+
+    @objc private func copyLinkClean(_ item: NSMenuItem) {
+        guard let action = copyLink.action else { return }
+        NSApp.sendAction(action, to: copyLink.target, from: item)
+        CleanLink.cleanPasteboardIfEnabled()
     }
 
     @objc private func searchSelection(_ item: NSMenuItem) {

@@ -121,7 +121,7 @@ extension Browser {
         menu.addItem(.separator())
         menu.addItem(ImageMenuItem("Copy Image Address") {
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(url.absoluteString, forType: .string)
+            NSPasteboard.general.setString(CleanLink.cleanIfEnabled(url).absoluteString, forType: .string)
         })
 
         let screen = NSEvent.mouseLocation

@@ -1521,8 +1521,9 @@ final class Browser: NSObject, ObservableObject {
     /// ⌘⇧C. The address, in the clipboard, and a line that says as much.
     func copyAddress() {
         guard let url = active?.address else { return }
+        let clean = CleanLink.cleanIfEnabled(url)
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+        NSPasteboard.general.setString(clean.absoluteString, forType: .string)
         announce("Address copied")
     }
 
@@ -1530,8 +1531,9 @@ final class Browser: NSObject, ObservableObject {
     /// links, not a bare address to explain in your own words.
     func copyMarkdownLink() {
         guard let tab = active, let url = tab.address else { return }
+        let clean = CleanLink.cleanIfEnabled(url)
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(Browser.markdownLink(tab.label, url), forType: .string)
+        NSPasteboard.general.setString(Browser.markdownLink(tab.label, clean), forType: .string)
         announce("Link copied")
     }
 
@@ -3626,7 +3628,8 @@ final class Browser: NSObject, ObservableObject {
 
     var selectedTabLinks: [String] {
         selectableTabs.compactMap { tab in
-            selectedTabIDs.contains(tab.id) ? tab.address?.absoluteString : nil
+            guard selectedTabIDs.contains(tab.id), let url = tab.address else { return nil }
+            return CleanLink.cleanIfEnabled(url).absoluteString
         }
     }
 

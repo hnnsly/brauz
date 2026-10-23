@@ -239,6 +239,10 @@ final class Preferences: ObservableObject {
             Store.keepsSignIns = keepsSignIns
         }
     }
+    /// Settings › Privacy › Copy clean links. On unless turned off.
+    @Published var cleanLinks: Bool {
+        didSet { store.set(cleanLinks, forKey: CleanLink.key) }
+    }
     /// A private tab gets extensions too, not just every other page. Off
     /// unless asked for - a private tab keeps nothing by default, extensions
     /// included, and some watch what a page does.
@@ -539,6 +543,7 @@ final class Preferences: ObservableObject {
         searchesSites = store.bool(forKey: "search.sites")
         siteNotifications = store.object(forKey: "notifications.ask") as? Bool ?? true
         shielded = store.object(forKey: "shield") as? Bool ?? true
+        cleanLinks = store.object(forKey: CleanLink.key) as? Bool ?? true
         let keeps = store.bool(forKey: "sites.keep")
         keepsSignIns = keeps
         // Before the first page is loaded into the store.
