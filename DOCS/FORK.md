@@ -42,6 +42,7 @@ The fork's own files:
 - `MacSleep.swift`: puts background tabs to sleep when the Mac sleeps. Hook: one line in `watchForSleep` in `Sleep.swift`.
 - `BasicAuth.swift`: HTTP Basic, Digest, and NTLM Authentication credentials stored by protection space, with "Remember in Brauz" and rejection safeguards.
 - `ExtensionWarnings.swift`: extension warning inspector sheet and combined error formatting. Hooks: one in `ExtensionsUI.swift`.
+- `CleanLink.swift`: drops tracking query parameters from copied and shared links, with a Privacy toggle. Hooks: `Browser.swift`, `Sharing.swift`, `Little.swift`, `Tab.swift`, `ImageMenu.swift`, `Prefs.swift`, `Settings.swift`.
 - `CLAUDE.md`: how work on the fork is done with Claude Code, and the shared issue list it keeps in `DOCS/issues/` (tracked in git).
 - `DOCS/BRAUZ-CHANGES.md`: what changed in Brauz itself, by release.
 - `sync.sh`: syncing with upstream, by hand.
@@ -79,6 +80,7 @@ The rest are edits and deletions inside upstream's files and can't move: the scr
 - `StoreIsolationTests.swift`
 - `WindowRestoreTests.swift`
 - `BasicAuthTests.swift`
+- `CleanLinkTests.swift`
 - `Tests/sidebar_window_exit.py`
 - `Tests/little_extensions.py`
 - `DOCS/FORK.md`

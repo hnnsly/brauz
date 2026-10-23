@@ -10,9 +10,10 @@ extension Browser {
     /// under the row when the tabs are across the top, and beside the
     /// column's page otherwise. The window's own corner is the fallback.
     func share() {
-        guard let url = active?.address, let window = self.window ?? Links.window,
+        guard let rawURL = active?.address, let window = self.window ?? Links.window,
               let view = active?.built.flatMap({ $0.window === window ? $0 : nil }) ?? window.contentView
         else { return }
+        let url = CleanLink.cleanIfEnabled(rawURL)
         // A few points in from the corner, so the arrow points at the page
         // rather than at its edge. Flipped or not, the picker hangs below.
         let inset: CGFloat = 12

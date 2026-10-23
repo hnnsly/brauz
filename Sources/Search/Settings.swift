@@ -646,6 +646,10 @@ struct SettingsPanel: View {
                     Switch(on: Binding(get: { !prefs.keepsSignIns }, set: { prefs.keepsSignIns = !$0 }))
                 }
                 Rule()
+                Line("Copy clean links", "Drop tracking parameters when copying or sharing addresses") {
+                    Switch(on: $prefs.cleanLinks)
+                }
+                Rule()
                 Line("Camera, microphone, location and notifications", "What each site was allowed or refused, and the sites whose videos don't float") {
                     Pill("Forget choices") { browser.forgetCaptureChoices() }
                 }
