@@ -13,6 +13,7 @@ Each section is headed by the tag it ships in, and the release workflow puts tha
 - Copy Address, Copy as Markdown Link, Share, and Little Window drop tracking query parameters (utm_*, click IDs, and YouTube/Spotify share tracking). A toggle in Settings › Privacy turns cleaning off.
 - Sleeping pinned tabs keep full opacity and show in greyscale instead of transparent darkening.
 - Faster page navigation by reusing installed page scripts across navigations with matching inputs.
+- Waking a sleeping tab keeps its snapshot cover until the page paints its first frame and crossfades smoothly into the live view, preventing white flashes and dropped clicks.
 
 ## v1.0.5.b2
 
