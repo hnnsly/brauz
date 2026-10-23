@@ -5654,9 +5654,6 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         // Whatever you last set this site to, before it draws a single frame
         // at the wrong size.
         tab.applyRememberedZoom()
-        // A tab waking from sleep: the new document is in, and a moment
-        // after it is on screen the picture of the old one can go.
-        tab.uncover(after: 0.45)
     }
 
     /// The page has drawn something: a view kept out of sight until now, so
@@ -5668,7 +5665,10 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         guard events & PageView.firstFrame != 0 else { return }
         (webView as? PageView)?.showFirstFrame()
         // Dark pages: a page's first frame is what it looks like.
-        if let tab = tab(for: webView) { duskLook(tab) }
+        if let tab = tab(for: webView) {
+            duskLook(tab)
+            tab.uncover()
+        }
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

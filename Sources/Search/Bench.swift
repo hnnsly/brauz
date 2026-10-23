@@ -978,6 +978,18 @@ final class Bench {
                 }
                 return
             }
+            if request["press"] as? Bool == true {
+                guard Store.testing else { answer(["error": "hit … press only works on a --test run"]); return }
+                func event(_ type: NSEvent.EventType) -> NSEvent? {
+                    NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                       windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
+                                       pressure: type == .leftMouseUp ? 0 : 1)
+                }
+                if let down = event(.leftMouseDown) { hit?.mouseDown(with: down) }
+                if let up = event(.leftMouseUp) { hit?.mouseUp(with: up) }
+                answer(["view": hit.map { String("\(type(of: $0))".prefix(60)) } ?? ""])
+                return
+            }
             if request["double"] as? Bool == true {
                 // A double-click there, handed to the view under it — through
                 // the window it would never arrive, the probe being in the
@@ -3360,6 +3372,8 @@ final class Bench {
                     "shy": tab.shy,
                     "bench": tab.bench,
                     "asleep": tab.asleep,
+                    "cover": tab.cover != nil,
+                    "unpainted": tab.built?.unpainted ?? false,
                     "awakeReason": browser.awake(because: tab) ?? "",
                     "staysReason": browser.stays(because: tab) ?? "",
                     // How long it counts as left (Closing.swift), and when
@@ -3569,6 +3583,8 @@ final class Bench {
             "bench": tab.bench,
             "active": tab.id == browser?.activeID,
             "asleep": tab.asleep,
+            "cover": tab.cover != nil,
+            "unpainted": tab.built?.unpainted ?? false,
             "shy": tab.shy,
             "noisy": tab.noisy,
             "muted": tab.muted,

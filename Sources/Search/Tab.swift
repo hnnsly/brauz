@@ -657,7 +657,10 @@ final class Tab: ObservableObject, Identifiable {
         Swipe.calm(web)
         web.onPull = { [weak self] pull in self?.pull = pull }
         web.leave = leave
-        web.onTouch = { [weak self] in self?.uncover() }
+        web.onTouch = { [weak self] in
+            guard self?.built?.unpainted != true else { return }
+            self?.uncover()
+        }
         web.onMenuClosed = { [weak self] in self?.popupGesture.menuClosed() }
         web.onKeys = { [weak self] in if let self { self.onKeys?(self) } }
         web.searchName = { [weak self] in self?.searchName?() }
@@ -1772,6 +1775,7 @@ final class PageView: WKWebView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        guard !unpainted else { return }
         onTouch?()
         super.mouseDown(with: event)
     }
@@ -1782,6 +1786,7 @@ final class PageView: WKWebView {
     /// drivers settled on regardless, so it's what a mouse's own firmware
     /// is tuned to send.
     override func otherMouseDown(with event: NSEvent) {
+        guard !unpainted else { return }
         switch event.buttonNumber {
         case 3 where canGoBack: goBack()
         case 4 where canGoForward: goForward()

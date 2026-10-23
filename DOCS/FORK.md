@@ -89,6 +89,8 @@ The rest are edits and deletions inside upstream's files and can't move: the scr
 - `Tests/little_extensions.py`
 - `Tests/real_site_timing.py`
 - `Tests/plainweb/main.swift`
+- `WakeCoverTests.swift`
+- `Tests/wake_cover.py`
 - `DOCS/FORK.md`
 
 ## Releasing
