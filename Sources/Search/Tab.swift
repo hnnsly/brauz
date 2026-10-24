@@ -810,6 +810,9 @@ final class Tab: ObservableObject, Identifiable {
         veils = css
         guard let built else { return }
         let controller = built.configuration.userContentController
+        let inputs = ArmInputs.current(for: self, hiding: css, to: url)
+        guard inputs != TabArming.inputs(for: controller) || controller.userScripts.isEmpty else { return }
+        TabArming.record(inputs, for: controller)
         controller.removeAllUserScripts()
         controller.addUserScript(PopupGestureRelay.userScript)
         controller.addUserScript(
@@ -1457,7 +1460,7 @@ final class Tab: ObservableObject, Identifiable {
     /// sockets, and the document WebKit would otherwise keep in its
     /// back-forward cache. The tab keeps its address; `web` builds again the
     /// next time anyone asks for it.
-    private func discard() {
+    func discard() {
         popupGesture.clear()
         if !blockedPopups.isEmpty { blockedPopups = [] }
         watch = []
@@ -1467,6 +1470,7 @@ final class Tab: ObservableObject, Identifiable {
         Passkeys.shared.forget(web)
         let controller = web.configuration.userContentController
         Web.release(controller)
+        TabArming.forget(for: controller)
         controller.removeAllUserScripts()
         // Other extension tabs still use this controller. Their existing
         // listeners need the relay, and their next documents need its script.

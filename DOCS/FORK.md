@@ -44,6 +44,7 @@ The fork's own files:
 - `ExtensionWarnings.swift`: extension warning inspector sheet and combined error formatting. Hooks: one in `ExtensionsUI.swift`.
 - `CleanLink.swift`: drops tracking query parameters from copied and shared links, with a Privacy toggle. Hooks: `Browser.swift`, `Sharing.swift`, `Little.swift`, `Tab.swift`, `ImageMenu.swift`, `Prefs.swift`, `Settings.swift`.
 - `PinStyle.swift`: pinned tab appearance (full opacity and desaturated when asleep). Hooks in `Side.swift` and `TabBar.swift`.
+- `TabArming.swift`: user script input tracking to reuse existing scripts across matching navigations. Hooks: `Tab.arm(hiding:to:)` and `Tab.discard` in `Tab.swift`.
 - `CLAUDE.md`: how work on the fork is done with Claude Code, and the shared issue list it keeps in `DOCS/issues/` (tracked in git).
 - `DOCS/BRAUZ-CHANGES.md`: what changed in Brauz itself, by release.
 - `sync.sh`: syncing with upstream, by hand.
@@ -83,6 +84,7 @@ The rest are edits and deletions inside upstream's files and can't move: the scr
 - `BasicAuthTests.swift`
 - `CleanLinkTests.swift`
 - `PinStyleTests.swift`
+- `TabArmTests.swift`
 - `Tests/sidebar_window_exit.py`
 - `Tests/little_extensions.py`
 - `DOCS/FORK.md`
