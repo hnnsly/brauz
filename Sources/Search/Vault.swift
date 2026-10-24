@@ -21,8 +21,16 @@ struct Login: Identifiable, Equatable, Hashable {
     /// written down, is never handed to a page anyone on the way could have
     /// written.
     var clear = false
+    var isSignIn = false
+    var port: Int = 0
+    var realm: String = ""
 
-    var id: String { host + "\u{1}" + user }
+    var id: String {
+        if isSignIn {
+            return host.lowercased() + "\u{1}" + user + "\u{1}" + String(port) + "\u{1}" + realm + "\u{1}signin"
+        }
+        return host.lowercased() + "\u{1}" + user
+    }
 }
 
 /// One item as a list needs it: the site, the account, and when it was last
@@ -38,14 +46,22 @@ struct Kept: Identifiable, Equatable, Hashable {
     var used: Date?
     /// Kept from a page sent in the clear, over plain http. See `Login`.
     var clear = false
+    var isSignIn = false
+    var port: Int = 0
+    var realm: String = ""
 
-    var id: String { host + "\u{1}" + user }
+    var id: String {
+        if isSignIn {
+            return host.lowercased() + "\u{1}" + user + "\u{1}" + String(port) + "\u{1}" + realm + "\u{1}signin"
+        }
+        return host.lowercased() + "\u{1}" + user
+    }
 }
 
 enum Vault {
     /// What every item of ours is tagged with. A test run tags its own, so a
     /// password saved while trying something never sits among the real ones.
-    private static let label = Store.world.map { "Search (\($0))" } ?? "Search"
+    static let label = Store.world.map { "Search (\($0))" } ?? "Search"
 
     // MARK: - reading
 
@@ -58,7 +74,8 @@ enum Vault {
     /// What is kept for a host, exactly. See `logins(matching:)` for the
     /// version that also looks across a site's subdomains.
     static func logins(for host: String) -> [Login] {
-        rows(where: [kSecAttrServer as String: host]).compactMap(login(from:))
+        let normalizedHost = host.lowercased()
+        return rows(where: [kSecAttrServer as String: normalizedHost]).compactMap(login(from:)).filter { !$0.isSignIn }
     }
 
     /// The keychain matches a server name exactly, and a sign-in rarely lives
@@ -66,11 +83,13 @@ enum Vault {
     /// password was kept for example.com. So the site is matched as a site:
     /// the host first, then anything sharing its registrable domain.
     static func logins(matching host: String) -> [Login] {
-        let domain = registrable(host)
-        let exact = logins(for: host)
+        let normalizedHost = host.lowercased()
+        let domain = registrable(normalizedHost)
+        let exact = logins(for: normalizedHost)
         let wider = rows(where: [:])
-            .filter { ($0[kSecAttrServer as String] as? String).map { $0 != host && registrable($0) == domain } ?? false }
+            .filter { ($0[kSecAttrServer as String] as? String).map { $0 != normalizedHost && registrable($0) == domain } ?? false }
             .compactMap(login(from:))
+            .filter { !$0.isSignIn }
         return (exact + wider).sorted { ($0.used ?? .distantPast) > ($1.used ?? .distantPast) }
     }
 
@@ -78,8 +97,13 @@ enum Vault {
     /// is `secret(of:)`, a call of its own, and only when it is asked for.
     /// Read on demand and never kept in a property.
     static func all() -> [Kept] {
-        rows(where: [:]).compactMap(kept(from:))
-            .sorted { $0.host == $1.host ? $0.user < $1.user : $0.host < $1.host }
+        var items = rows(where: [:]).compactMap(kept(from:))
+        for kept in BasicAuth.allKept() {
+            if !items.contains(where: { $0.id == kept.id }) {
+                items.append(kept)
+            }
+        }
+        return items.sorted { $0.host == $1.host ? $0.user < $1.user : $0.host < $1.host }
     }
 
     /// The items' attributes — no secrets — narrowed by whatever is given.
@@ -87,6 +111,7 @@ enum Vault {
         var query: [String: Any] = [
             kSecClass as String: kSecClassInternetPassword,
             kSecAttrLabel as String: label,
+            kSecAttrAuthenticationType as String: kSecAttrAuthenticationTypeHTMLForm,
             kSecReturnAttributes as String: true,
             kSecMatchLimit as String: kSecMatchLimitAll,
         ]
@@ -103,18 +128,22 @@ enum Vault {
     }
 
     /// One item's secret, by the two things that name it.
-    private static func secret(host: String, user: String) -> String? {
+    static func secret(host: String, user: String, isSignIn: Bool = false, port: Int? = nil, realm: String? = nil) -> String? {
+        let normalizedHost = host.lowercased()
+        if isSignIn {
+            return BasicAuth.secret(host: normalizedHost, user: user, port: port, realm: realm)
+        }
         var out: CFTypeRef?
         let status = SecItemCopyMatching([
             kSecClass as String: kSecClassInternetPassword,
             kSecAttrLabel as String: label,
-            kSecAttrServer as String: host,
+            kSecAttrServer as String: normalizedHost,
             kSecAttrAccount as String: user,
+            kSecAttrAuthenticationType as String: kSecAttrAuthenticationTypeHTMLForm,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ] as CFDictionary, &out)
         guard status == errSecSuccess, let data = out as? Data else {
-            if status != errSecItemNotFound { NSLog("Vault: keychain read failed (%d)", status) }
             return nil
         }
         return String(data: data, encoding: .utf8)
@@ -122,7 +151,7 @@ enum Vault {
 
     /// One item's secret, where a list holds only the item: read when a
     /// password is shown or copied, and never as part of a list.
-    static func secret(of kept: Kept) -> String? { secret(host: kept.host, user: kept.user) }
+    static func secret(of kept: Kept) -> String? { secret(host: kept.host, user: kept.user, isSignIn: kept.isSignIn, port: kept.port, realm: kept.realm) }
 
     /// What an item's attributes say beyond its name: when it was last used,
     /// and whether it was kept from a page sent in the clear.
@@ -138,11 +167,16 @@ enum Vault {
     /// filling a sign-in in, and telling whether one is already kept.
     private static func login(from row: [String: Any]) -> Login? {
         let user = account(of: row)
-        guard let host = row[kSecAttrServer as String] as? String,
-              let password = secret(host: host, user: user)
+        let authType = row[kSecAttrAuthenticationType as String] as? String
+        let isSignIn = authType != nil && authType != (kSecAttrAuthenticationTypeHTMLForm as String)
+        guard let rawHost = row[kSecAttrServer as String] as? String else { return nil }
+        let host = rawHost.lowercased()
+        let port = (row[kSecAttrPort as String] as? Int) ?? 0
+        let realm = (row[kSecAttrSecurityDomain as String] as? String) ?? ""
+        guard let password = secret(host: host, user: user, isSignIn: isSignIn, port: port, realm: realm)
         else { return nil }
         let (used, clear) = noted(row)
-        return Login(host: host, user: user, password: password, used: used, clear: clear)
+        return Login(host: host, user: user, password: password, used: used, clear: clear, isSignIn: isSignIn, port: port, realm: realm)
     }
 
     /// The account an item is kept under. A sign-in with a password box
@@ -156,17 +190,23 @@ enum Vault {
 
     /// One item without its secret, for the list.
     private static func kept(from row: [String: Any]) -> Kept? {
-        guard let host = row[kSecAttrServer as String] as? String else { return nil }
+        guard let rawHost = row[kSecAttrServer as String] as? String else { return nil }
+        let host = rawHost.lowercased()
         let user = account(of: row)
         let (used, clear) = noted(row)
-        return Kept(host: host, user: user, used: used, clear: clear)
+        let authType = row[kSecAttrAuthenticationType as String] as? String
+        let isSignIn = authType != nil && authType != (kSecAttrAuthenticationTypeHTMLForm as String)
+        let port = (row[kSecAttrPort as String] as? Int) ?? 0
+        let realm = (row[kSecAttrSecurityDomain as String] as? String) ?? ""
+        return Kept(host: host, user: user, used: used, clear: clear, isSignIn: isSignIn, port: port, realm: realm)
     }
 
     // MARK: - writing
 
     @discardableResult
     static func save(host: String, user: String, password: String, used: Date? = nil, clear: Bool = false) -> Bool {
-        guard !host.isEmpty, !password.isEmpty,
+        let normalizedHost = host.lowercased()
+        guard !normalizedHost.isEmpty, !password.isEmpty,
               let data = password.data(using: .utf8)
         else { return false }
 
@@ -175,9 +215,10 @@ enum Vault {
         // username — and an update would write this password over it.
         let identity: [String: Any] = [
             kSecClass as String: kSecClassInternetPassword,
-            kSecAttrServer as String: host,
+            kSecAttrServer as String: normalizedHost,
             kSecAttrAccount as String: user,
             kSecAttrLabel as String: label,
+            kSecAttrAuthenticationType as String: kSecAttrAuthenticationTypeHTMLForm,
         ]
         // A web form's, which also keeps ours apart from another app's item
         // in the keychain's eyes: one for the same server, account and
@@ -206,13 +247,43 @@ enum Vault {
 
     /// Whether the keychain let it go: Remove All… counts only those.
     @discardableResult
-    static func forget(host: String, user: String) -> Bool {
-        SecItemDelete([
+    static func forget(_ kept: Kept) -> Bool {
+        forget(host: kept.host, user: kept.user, isSignIn: kept.isSignIn, port: kept.port, realm: kept.realm)
+    }
+
+    @discardableResult
+    static func forget(host: String, user: String, isSignIn: Bool? = nil, port: Int? = nil, realm: String? = nil) -> Bool {
+        let normalizedHost = host.lowercased()
+        if let isSignIn {
+            if isSignIn {
+                // Remove non-HTMLForm (sign-in) items
+                return BasicAuth.forget(host: normalizedHost, user: user, port: port, realm: realm)
+            } else {
+                let query: [String: Any] = [
+                    kSecClass as String: kSecClassInternetPassword,
+                    kSecAttrServer as String: normalizedHost,
+                    kSecAttrAccount as String: user,
+                    kSecAttrLabel as String: label,
+                    kSecAttrAuthenticationType as String: kSecAttrAuthenticationTypeHTMLForm,
+                ]
+                return SecItemDelete(query as CFDictionary) == errSecSuccess
+            }
+        }
+        var deletedAny = false
+        let query: [String: Any] = [
             kSecClass as String: kSecClassInternetPassword,
-            kSecAttrServer as String: host,
+            kSecAttrServer as String: normalizedHost,
             kSecAttrAccount as String: user,
             kSecAttrLabel as String: label,
-        ] as CFDictionary) == errSecSuccess
+            kSecAttrAuthenticationType as String: kSecAttrAuthenticationTypeHTMLForm,
+        ]
+        if SecItemDelete(query as CFDictionary) == errSecSuccess {
+            deletedAny = true
+        }
+        if BasicAuth.forget(host: normalizedHost, user: user, port: port, realm: realm) {
+            deletedAny = true
+        }
+        return deletedAny
     }
 
     // MARK: - sites that asked not to be asked

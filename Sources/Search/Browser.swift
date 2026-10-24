@@ -872,7 +872,7 @@ final class Browser: NSObject, ObservableObject {
     }
 
     func forget(_ login: Kept) {
-        Vault.forget(host: login.host, user: login.user)
+        Vault.forget(login)
         relist()
     }
 
@@ -901,7 +901,7 @@ final class Browser: NSObject, ObservableObject {
                 DispatchQueue.global(qos: .userInitiated).async {
                     // Counted as the keychain answers, not as asked: one
                     // it kept is not reported gone.
-                    let gone = shown.filter { Vault.forget(host: $0.host, user: $0.user) }.count
+                    let gone = shown.filter { Vault.forget($0) }.count
                     DispatchQueue.main.async {
                         self.forgetting = false
                         self.relist()
@@ -5205,6 +5205,9 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         decidePolicyFor response: WKNavigationResponse,
         decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
     ) {
+        if let http = response.response as? HTTPURLResponse {
+            BasicAuth.responseReceived(for: webView, statusCode: http.statusCode, isMainFrame: response.isForMainFrame)
+        }
         // A redirect (3xx) has nowhere to be shown and carries no content of
         // its own, but must be followed rather than downloaded — even if its
         // headers say `application/binary` or `application/octet-stream`, as
@@ -5584,6 +5587,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        BasicAuth.navigationFailed(for: webView)
         anyTab(for: webView)?.extensionReturn.finished(navigation)
         fail(webView, error)
     }
@@ -5593,6 +5597,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         didFailProvisionalNavigation navigation: WKNavigation!,
         withError error: Error
     ) {
+        BasicAuth.navigationFailed(for: webView)
         anyTab(for: webView)?.extensionReturn.finished(navigation)
         fail(webView, error)
     }
