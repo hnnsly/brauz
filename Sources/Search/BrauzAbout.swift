@@ -7,12 +7,27 @@ import SwiftUI
 enum BrauzAbout {
     static let repository = URL(string: "https://github.com/hnnsly/brauz")!
 
+    /// The Brauz release version, or Search's version when running
+    /// without a BrauzVersion key.
+    static var version: String {
+        version(from: Bundle.main.infoDictionary)
+    }
+
+    /// Resolves the Brauz release version from an info dictionary, falling
+    /// back to Updater.version when missing or empty.
+    static func version(from info: [String: Any]?) -> String {
+        guard let brauz = info?["BrauzVersion"] as? String, !brauz.isEmpty else {
+            return Updater.version
+        }
+        return brauz
+    }
+
     /// A new issue on the fork, with the version already in it. Settings and
     /// Help › Send Feedback both come here (Links.writeFeedback).
     static func writeFeedback() {
         var issue = URLComponents(url: repository.appendingPathComponent("issues/new"), resolvingAgainstBaseURL: false)
         issue?.queryItems = [
-            URLQueryItem(name: "body", value: "\n\n-\nBrauz \(Updater.version), build \(Updater.build), macOS \(ProcessInfo.processInfo.operatingSystemVersionString)"),
+            URLQueryItem(name: "body", value: "\n\n-\nBrauz \(BrauzAbout.version), Search \(Updater.version), build \(Updater.build), macOS \(ProcessInfo.processInfo.operatingSystemVersionString)"),
         ]
         guard let url = issue?.url else { return }
         NSWorkspace.shared.open(url)
@@ -31,7 +46,7 @@ struct BrauzAboutHeader: View {
                 Text("Brauz")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Palette.ink)
-                Text("based on Search by Office Commun · version \(Updater.version)")
+                Text("version \(BrauzAbout.version) · based on Search \(Updater.version) by Office Commun")
                     .font(.system(size: 12))
                     .foregroundStyle(Palette.muted)
             }
