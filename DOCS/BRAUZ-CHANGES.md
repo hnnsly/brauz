@@ -6,6 +6,8 @@ Each section is headed by the tag it ships in, and the release workflow puts tha
 
 ## Unreleased
 
+- Launch no longer reopens saved windows that have no tabs. Thousands of them in `windows.json` left empty windows on screen and could hang the launch.
+
 ## v1.0.5.b2
 
 - An open vertical sidebar stays open when the pointer is outside the Brauz window or over another app, and normal auto-hide resumes on return to the page.
