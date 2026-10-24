@@ -15,13 +15,21 @@ When a sleeping tab wakes, `tab.loading` becomes true, causing `PinSquare` in `S
 - Ruled out / wrong in the first draft: The issue assumed layout measurement in `SideBar` races with geometry updates; `SideBar` has a fixed width (`prefs.sideWidth`) with no dynamic horizontal measurement.
 
 ## Decisions (2026-10-24)
-- Build a red loop first using a Python bench probe that sleeps and wakes a tab with the sidebar folded and unfolded, sampling sidebar x position and pinned cell count.
-- Show the user ranked hypotheses before any fix.
-- Retain previous space tabs and swap atomically when new tabs are ready rather than clearing tabs to an empty array.
-- Overlay the loading indicator ring on top of the icon instead of replacing it, avoiding unmounting pinned glyphs during reload.
+- The user has seen it both with the sidebar folded and with it always visible, or is not sure which.
+- Build a red loop first, then show the user ranked hypotheses before any fix. No fix is chosen yet: keeping the old space's tabs until the new ones are ready, and laying the loading ring over the pin icon, were options from the triage, not decisions.
+- It happened with hands off the trackpad, so a half-finished space swipe is ruled out.
+- Keep this issue open until the user can describe the steps or send a screen recording.
+
+## Probe, 2026-10-24
+A probe (branch `probe/0020-sidebar-wake`, `Tests/sidebar_wake_layout.py` and a `sidebar-sample` bench command) slept, woke and reloaded pinned and unpinned tabs with the sidebar visible, folded and peeking, and across a space switch. It stayed green in all 20 checks. The only thing that reproduced "about 20% left, pins gone" was a space swipe held partway (dx = -46 pt), which the user has ruled out.
+
+The probe cannot see this bug, so it is not merged:
+- It samples only after each bench command returns, so a transient shift during the wake is already over.
+- It counts pinned tabs from the model (`pinnedCount`), not from what is drawn, so a pin that disappears from the screen still counts.
+- It assumes the sidebar is on the left.
 
 ## Fix
-(Pending implementation after user agrees on ranked hypotheses)
+None yet. Waiting for steps or a recording.
 
 ## Guarded by
 Automated split view / sidebar layout python bench probes.

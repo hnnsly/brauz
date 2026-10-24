@@ -21,8 +21,8 @@ Ruled out / wrong in the first draft:
 
 ## Decisions (2026-10-24)
 - The "N warnings" text on the extension row in Settings > Extensions becomes clickable and opens a sheet listing both WebKit's context errors and the runtime errors `Extensions.swift` already collects, with a Copy button.
-- New UI in a fork-only file (`Sources/Search/ExtensionDiagnostics.swift`), with one hook in `ExtensionsUI.swift`.
-- Not chosen: tooltips or context menu items alone, because users need to easily inspect and copy multi-line error traces.
+- New UI in a fork-only file, with one hook in `ExtensionsUI.swift`.
+- Not chosen: an "Errors & Warnings…" item in the row menu, or both entry points.
 
 ## Fix
 Make the warning text clickable in `ExtensionsUI.swift`, presenting a sheet powered by a new fork-only `ExtensionDiagnostics.swift` view that displays unified WebKit context errors and runtime script logs along with a Copy button.
