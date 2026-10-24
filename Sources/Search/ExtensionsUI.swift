@@ -157,7 +157,7 @@ struct ExtensionsPage: View {
                         .font(.system(size: 13))
                         .foregroundStyle(Palette.ink)
                         .lineLimit(1)
-                    Text(detail(context))
+                    detail(context)
                         .font(.system(size: 11.5))
                         .foregroundStyle(Palette.muted)
                         .lineLimit(1)
@@ -214,14 +214,9 @@ struct ExtensionsPage: View {
             item.source.map { "From “\(URL(fileURLWithPath: $0).lastPathComponent)”" } ?? "From a folder"
         }
 
-        private func detail(_ context: WKWebExtensionContext?) -> String {
-            var parts = ["Version \(item.version)", item.fromStore ? "Chrome Web Store" : folder]
-            if item.enabled, context == nil { parts.append("couldn't start") }
-            if extensions.newTabPageID == item.id {
-                parts.append("shows in new tabs")
-            }
-            if let errors = context?.errors, !errors.isEmpty { parts.append("\(errors.count) warning\(errors.count == 1 ? "" : "s")") }
-            return parts.joined(separator: " · ")
+        @ViewBuilder
+        private func detail(_ context: WKWebExtensionContext?) -> some View {
+            ExtensionRowDetail(item: item, extensions: extensions, context: context, folder: folder)
         }
     }
 }
