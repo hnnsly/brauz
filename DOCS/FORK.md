@@ -39,6 +39,7 @@ The fork's own files:
 - `BrauzAbout.swift`: Settings › About as Brauz, and feedback going to the fork's GitHub issues. Hooks: two in `Settings.swift`, `writeFeedback` in `Links.swift`.
 - `BrauzUpdates.swift`: Brauz looks at its GitHub releases once a day to say when a new one is out.
 - `LittleExtras.swift`: Little Window address field, Back button, placement, and spaces/extensions.
+- `MacSleep.swift`: puts background tabs to sleep when the Mac sleeps. Hook: one line in `watchForSleep` in `Sleep.swift`.
 - `CLAUDE.md`: how work on the fork is done with Claude Code, and the shared issue list it keeps in `DOCS/issues/` (tracked in git).
 - `DOCS/BRAUZ-CHANGES.md`: what changed in Brauz itself, by release.
 - `sync.sh`: syncing with upstream, by hand.
@@ -65,6 +66,7 @@ The rest are edits and deletions inside upstream's files and can't move: the scr
 
 - `PageLengthTests.swift`
 - `DraftSleepTests.swift`
+- `MacSleepTests.swift`
 - `LittleWindowTests.swift`
 - `ImageCopyTests.swift`
 - `PageUndoTests.swift`

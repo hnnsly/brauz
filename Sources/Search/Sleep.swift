@@ -109,6 +109,7 @@ extension Browser {
         }
         source.resume()
         pressure = source
+        MacSleep.watch(self)
     }
 
     /// Every tab that has gone long enough without being looked at, the one

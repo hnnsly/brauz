@@ -7,6 +7,7 @@ Each section is headed by the tag it ships in, and the release workflow puts tha
 ## Unreleased
 
 - Launch no longer reopens saved windows that have no tabs. Thousands of them in `windows.json` left empty windows on screen and could hang the launch.
+- Background tabs sleep immediately when your Mac sleeps, freeing memory while keeping visible tabs and active drafts awake.
 
 ## v1.0.5.b2
 
