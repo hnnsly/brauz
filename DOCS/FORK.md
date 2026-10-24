@@ -72,6 +72,7 @@ The rest are edits and deletions inside upstream's files and can't move: the scr
 - `TabCloseTests.swift`
 - `FoldPeekTests.swift`
 - `StoreIsolationTests.swift`
+- `WindowRestoreTests.swift`
 - `Tests/sidebar_window_exit.py`
 - `Tests/little_extensions.py`
 - `DOCS/FORK.md`

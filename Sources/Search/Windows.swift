@@ -39,6 +39,13 @@ struct WindowRecord: Codable {
     }
 
     var rect: NSRect? { frame.map(NSRectFromString).flatMap { $0.width > 100 && $0.height > 100 ? $0 : nil } }
+
+    /// A window with no tabs in any space. Record 0 is written this way on
+    /// purpose (its tabs live in session files), but any other empty record
+    /// has nothing to restore and leaves a hollow window.
+    var isEmpty: Bool {
+        !rows.values.contains { !$0.tabs.isEmpty }
+    }
 }
 
 /// The browser whose window is in front, for the menus and everything else
@@ -383,10 +390,9 @@ enum Browsers {
         records[0].rows = [:]
         for browser in saved.dropFirst() { records.append(record(of: browser, rows: true)) }
         // Last time's other windows, while they haven't been brought back:
-        // as they were written, not dropped. They come back once the first
-        // window is on screen, and a launch for a small window can end
-        // before one ever is.
-        if !restored { records += read().dropFirst() }
+        // as they were written, not dropped. Empty records are left behind
+        // so an un-restored launch doesn't snowball windows.json.
+        if !restored { records += restorable(read()) }
         // Frozen before it goes to the Disk queue.
         let snapshot = records
         Disk.write(file, now: now) { try? JSONEncoder().encode(snapshot) }
@@ -402,6 +408,13 @@ enum Browsers {
         }
     }
     private static var saving = false
+
+    /// Other windows worth restoring or keeping for later: drops the first
+    /// (the primary window, whose tabs live in session files) and any record
+    /// with no tabs in any space.
+    static func restorable(_ records: [WindowRecord]) -> [WindowRecord] {
+        records.dropFirst().filter { !$0.isEmpty }
+    }
 
     static func read() -> [WindowRecord] {
         guard let data = try? Data(contentsOf: file) else { return [] }
@@ -430,7 +443,7 @@ enum Browsers {
     static func restore() {
         let records = read()
         guard records.count > 1 else { return }
-        for record in records.dropFirst() {
+        for record in restorable(records) {
             open(Browser(record: record), frame: record.rect)
         }
         // The first window in front, as the app opens; not while they are
