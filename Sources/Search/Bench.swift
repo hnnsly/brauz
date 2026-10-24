@@ -34,6 +34,10 @@ final class Bench {
     /// as separate from the real one as everything else it keeps.
     static var socket: URL { Store.file("bench.sock") }
 
+    static var onNavCommit: ((WKWebView) -> Void)?
+    static var onNavLayout: ((WKWebView) -> Void)?
+    static var onNavFinish: ((WKWebView) -> Void)?
+
     /// True while something is listening.
     private(set) var running = false
 
@@ -345,6 +349,61 @@ final class Bench {
             }
             tab.go(to: url)
             answer(describe(tab))
+
+        case "time-nav":
+            guard Store.testing else { answer(["error": "time-nav only works on a --test run"]); return }
+            guard let url = (request["url"] as? String).flatMap(Address.url(from:)) else {
+                answer(["error": "time-nav needs a url"])
+                return
+            }
+            let tab = find(request, in: browser) ?? browser.active ?? browser.tabs.first
+            guard let tab else { answer(["error": "no tab for time-nav"]); return }
+            let web = tab.web
+            let start = CACurrentMediaTime()
+            var commitMs: Double = -1
+            var layoutMs: Double = -1
+            var finishMs: Double = -1
+            var replied = false
+
+            let finishReply: () -> Void = {
+                guard !replied else { return }
+                replied = true
+                Bench.onNavCommit = nil
+                Bench.onNavLayout = nil
+                Bench.onNavFinish = nil
+                answer([
+                    "url": url.absoluteString,
+                    "commit": commitMs,
+                    "layout": layoutMs,
+                    "finish": finishMs
+                ])
+            }
+
+            Bench.onNavCommit = { [weak web] view in
+                if view === web, commitMs < 0 {
+                    commitMs = (CACurrentMediaTime() - start) * 1000
+                }
+            }
+            Bench.onNavLayout = { [weak web] view in
+                if view === web, layoutMs < 0 {
+                    layoutMs = (CACurrentMediaTime() - start) * 1000
+                }
+            }
+            Bench.onNavFinish = { [weak web] view in
+                if view === web {
+                    if finishMs < 0 {
+                        finishMs = (CACurrentMediaTime() - start) * 1000
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        finishReply()
+                    }
+                }
+            }
+            let timeout = request["timeout"] as? Double ?? 30.0
+            DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
+                finishReply()
+            }
+            tab.go(to: url)
 
         case "close":
             if (request["id"] as? String) == "all" {

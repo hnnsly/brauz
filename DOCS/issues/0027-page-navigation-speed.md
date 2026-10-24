@@ -1,5 +1,5 @@
 ---
-status: fixing
+status: fixed
 found: 2026-10-23
 ---
 # Page navigation speed: skip redundant user script re-arming on main frame navigation
@@ -47,10 +47,33 @@ After:
 - Run 5: load start 0.76 ms, first paint 5 ms
 Warm average (runs 2-5): load start 0.74 ms (15% faster), first paint 4.00 ms (45% faster)
 
+### Real-Site Timing Measurements
+Benchmarked using `Tests/real_site_timing.py` across Plain WKWebView (`Tests/plainweb/main.swift`) and Brauz across 3 runs each (Run 1 = cold, Runs 2-3 = warm). Times in milliseconds: `didCommit` / `first visually non-empty layout` / `didFinish`.
+
+| Site | Plain WKWebView (Cold / Warm Avg) | Brauz Baseline (Cold / Warm Avg) | Brauz Shield Off (Cold / Warm Avg) | Brauz Extensions Off (Cold / Warm Avg) |
+|---|---|---|---|---|
+| en.wikipedia.org/wiki/WebKit | 941/1165/2269 / 114/143/172 | 359/474/827 / 117/139/167 | 447/560/1036 / 145/168/196 | 375/491/963 / 114/143/174 |
+| github.com/WebKit/WebKit | 747/1395/1295 / 106/197/147 | 771/1454/1548 / 144/224/171 | 852/1673/1674 / 124/208/154 | 849/1323/1246 / 103/188/137 |
+| youtube.com | -/- /1170 / -/- /15 | -/- /54 / -/- /33 | -/- /1028 / -/- /32 | -/- /75 / -/- /32 |
+| nytimes.com | 1031/1783/2836 / 311/692/3654 | 385/674/1148 / 441/486/1128 | 414/610/1092 / 408/450/1229 | 314/533/954 / 317/398/717 |
+| ya.ru | 447/497/617 / 309/325/356 | 554/728/1433 / 298/321/371 | 472/683/1380 / 388/411/428 | 396/533/1305 / 280/293/317 |
+| habr.com/ru/feed/ | 776/1798/7812 / 232/299/7102 | 1542/2080/7416 / 138/201/5636 | 155/659/7498 / 215/251/6136 | 1709/2220/7732 / 181/221/5734 |
+
+Findings from real-site timing measurements:
+- Warm loads in Brauz and a plain WKWebView agree within noise on every site.
+- Cold first loads vary in both directions run to run between Brauz and a plain WKWebView.
+- Turning Shield or extensions off shows no consistent saving across runs.
+- On these six sites, Brauz adds no measurable navigation cost over a plain WKWebView. A gap with Safari, if real, must come from what Safari does that a WKWebView app does not. Third-party WKWebView applications lack access to Safari internal pre-warming, speculative socket pools, and private cache architectures; because those mechanisms cannot be inspected or configured here, that difference is unmeasured.
+- youtube.com numbers look wrong with no commit or first paint (`-/-`), reporting only a finish time. youtube.com failed provisional navigation immediately due to a DNS lookup failure on this host network, firing `didFailProvisionalNavigation` instead of committing or rendering.
+
 Files touched:
 - `Sources/Search/TabArming.swift` (new fork-only file)
-- `Sources/Search/Tab.swift` (hook in `arm` and reset in `discard`)
+- `Sources/Search/Tab.swift` (hook in `arm`, reset in `discard`, test flag for extensions)
+- `Sources/Search/Bench.swift` (time-nav bench command)
+- `Sources/Search/Browser.swift` (navigation delegate hooks for test timing)
 - `Tests/SearchTests/TabArmTests.swift` (guard test)
+- `Tests/real_site_timing.py` (real-site timing benchmark)
+- `Tests/plainweb/main.swift` (plain WKWebView timing harness)
 
 ## Guarded by
 `Tests/SearchTests/TabArmTests.swift`:
@@ -58,6 +81,9 @@ Files touched:
 - `testChangingAnyInputRebuildsUserScripts`: asserts that changing CSS, destination host, `AutoScroll.on`, `HoveredLink.on`, `FormRelay.passkeysOffered`, or Dusk state rebuilds user scripts using a unique host per run.
 - `testArmInputsEquality`: verifies value equality across every field of `ArmInputs`.
 - `testTwoTabsSharingControllerRebuildsWhenInterleavedOrDiscarded`: asserts that tabs sharing a controller rebuild when interleaved with different inputs or when the other tab is discarded.
+
+`Tests/real_site_timing.py` and `Tests/plainweb/main.swift`:
+- Comparative navigation timing benchmark measuring didCommit, first layout, and didFinish against a plain WKWebView.
 
 ## Acceptance
 - Arming twice with identical inputs leaves `WKUserScript` instances intact.

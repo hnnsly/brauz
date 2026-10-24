@@ -5631,6 +5631,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        if Store.testing { Bench.onNavCommit?(webView) }
         popupTab(for: webView)?.popupGesture.clear()
         guard let tab = tab(for: webView) else {
             // A small window's page came: what failed before it is over.
@@ -5663,6 +5664,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
     /// on a view asked to — see `PageView.holdForFirstFrame()`.
     @objc(_webView:renderingProgressDidChange:)
     func webView(_ webView: WKWebView, renderingProgressDidChange events: UInt) {
+        if Store.testing, events & PageView.firstFrame != 0 { Bench.onNavLayout?(webView) }
         guard events & PageView.firstFrame != 0 else { return }
         (webView as? PageView)?.showFirstFrame()
         // Dark pages: a page's first frame is what it looks like.
@@ -5670,6 +5672,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if Store.testing { Bench.onNavFinish?(webView) }
         // A page with nothing to lay out never has a first frame. Done is
         // done, and it is shown.
         (webView as? PageView)?.showFirstFrame()
@@ -5704,6 +5707,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
     }
 
     private func fail(_ webView: WKWebView, _ error: Error) {
+        if Store.testing { Bench.onNavFinish?(webView) }
         let tab = tab(for: webView) ?? littleTab(for: webView)
         tab?.uncover()
         let nsError = error as NSError

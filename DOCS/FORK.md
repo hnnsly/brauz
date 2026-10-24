@@ -87,6 +87,8 @@ The rest are edits and deletions inside upstream's files and can't move: the scr
 - `TabArmTests.swift`
 - `Tests/sidebar_window_exit.py`
 - `Tests/little_extensions.py`
+- `Tests/real_site_timing.py`
+- `Tests/plainweb/main.swift`
 - `DOCS/FORK.md`
 
 ## Releasing
