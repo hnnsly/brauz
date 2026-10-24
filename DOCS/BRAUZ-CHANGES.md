@@ -12,6 +12,7 @@ Each section is headed by the tag it ships in, and the release workflow puts tha
 - Settings › Extensions: extension warning counts include runtime errors and open an inspector sheet with a button to copy diagnostic messages.
 - Copy Address, Copy as Markdown Link, Share, and Little Window drop tracking query parameters (utm_*, click IDs, and YouTube/Spotify share tracking). A toggle in Settings › Privacy turns cleaning off.
 - Sleeping pinned tabs keep full opacity and show in greyscale instead of transparent darkening.
+- Faster page navigation by reusing installed page scripts across navigations with matching inputs.
 
 ## v1.0.5.b2
 
