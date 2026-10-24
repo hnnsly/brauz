@@ -1198,19 +1198,26 @@ final class Browser: NSObject, ObservableObject {
     @Published private(set) var asking: CaptureAsk?
     private var decide: ((WKPermissionDecision) -> Void)?
     private var askedAbout = ""
+    let sitePermissions = SitePermissionCoordinator()
 
     func allowCapture() { answerCapture(.grant) }
     func allowCaptureOnce() { answerCapture(.grant, keep: false) }
     func denyCapture() { answerCapture(.deny) }
 
     private func answerCapture(_ decision: WKPermissionDecision, keep: Bool = true) {
-        guard let decide, let asking, Date().timeIntervalSince(asking.shown) > 0.5 else { return }
+        guard let asking, Date().timeIntervalSince(asking.shown) > 0.5 else { return }
+        if sitePermissions.activePrompt != nil {
+            sitePermissions.answer(decision: decision, keep: keep)
+            return
+        }
+        guard let decide else { return }
         // Remembered per site, so a call you take every week asks once.
         if keep, !askedAbout.isEmpty { Store.settings.set(decision == .grant, forKey: "capture." + askedAbout) }
         decide(decision)
         self.decide = nil
         askedAbout = ""
         self.asking = nil
+        sitePermissions.advanceQueue()
     }
 
     /// Everything a site has been allowed or refused, for the day you want to
@@ -1221,6 +1228,7 @@ final class Browser: NSObject, ObservableObject {
             Store.settings.removeObject(forKey: key)
         }
         SiteNotifications.shared.objectWillChange.send()
+        SitePermissions.shared.objectWillChange.send()
         announce("Camera, microphone, location and notification choices forgotten")
     }
 
@@ -1683,6 +1691,17 @@ final class Browser: NSObject, ObservableObject {
     /// window's, empty.
     init(record: WindowRecord?) {
         super.init()
+        sitePermissions.onPromptChanged = { [weak self] prompt in
+            guard let self else { return }
+            if let prompt {
+                self.asking = CaptureAsk(host: prompt.host, wants: prompt.wants, keeps: !prompt.shy)
+            } else if self.decide == nil {
+                self.asking = nil
+            }
+        }
+        sitePermissions.isExternalPromptActive = { [weak self] in
+            self?.decide != nil
+        }
         let first = !Browser.booted
         Browser.booted = true
         usesFiles = record == nil
@@ -5054,6 +5073,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         guard let navigation else { return }
+        if let tab = anyTab(for: webView) { sitePermissions.drop(tabID: tab.id) }
         anyTab(for: webView)?.extensionReturn.started(navigation, at: webView.url)
     }
 
@@ -5471,11 +5491,39 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             host = origin.host.isEmpty ? (tab(for: webView)?.address?.host() ?? "This page") : origin.host
             site = origin.host.isEmpty ? host : "\(origin.protocol)://\(origin.host)" + (origin.port == 0 ? "" : ":\(origin.port)")
         }
-        let key = "\(site)|\(type.rawValue)"
         let shy = tab(for: webView).map { $0.shy || !webView.configuration.websiteDataStore.isPersistent } ?? false
 
-        if !shy, let remembered = Store.settings.object(forKey: "capture." + key) as? Bool {
-            decisionHandler(remembered ? .grant : .deny)
+        askedForCapture(webView, site: site, host: host, type: type, shy: shy, decisionHandler: decisionHandler)
+    }
+
+    func askedForCapture(
+        _ webView: WKWebView,
+        site: String,
+        host: String,
+        type: WKMediaCaptureType,
+        shy: Bool,
+        decisionHandler: @escaping (WKPermissionDecision) -> Void
+    ) {
+        guard let tab = tab(for: webView) else {
+            let key = "\(site)|\(type.rawValue)"
+            if !shy, let remembered = Store.settings.object(forKey: "capture." + key) as? Bool {
+                decisionHandler(remembered ? .grant : .deny)
+                return
+            }
+            ask(from: webView, show: { [weak self] in
+                guard let self else { return decisionHandler(.deny) }
+                // One question at a time. A second page asking while the first is
+                // still waiting is refused rather than queued behind it.
+                guard decide == nil && sitePermissions.activePrompt == nil else { return decisionHandler(.deny) }
+                decide = decisionHandler
+                askedAbout = shy ? "" : key
+                asking = CaptureAsk(host: host, wants: Browser.name(for: type))
+            }, drop: { decisionHandler(.deny) })
+            return
+        }
+
+        if !shy, let remembered = SitePermissionCoordinator.rememberedDecision(for: site, type: type) {
+            decisionHandler(remembered)
             return
         }
         // Asked over its own page only, as a page's other questions are (see
@@ -5483,12 +5531,14 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         // to it, and is asked then — never over the page you are on.
         ask(from: webView, show: { [weak self] in
             guard let self else { return decisionHandler(.deny) }
-            // One question at a time. A second page asking while the first is
-            // still waiting is refused rather than queued behind it.
-            guard decide == nil else { return decisionHandler(.deny) }
-            decide = decisionHandler
-            askedAbout = shy ? "" : key
-            asking = CaptureAsk(host: host, wants: Browser.name(for: type))
+            self.sitePermissions.request(
+                tabID: tab.id,
+                site: site,
+                host: host,
+                type: type,
+                shy: shy,
+                decisionHandler: decisionHandler
+            )
         }, drop: { decisionHandler(.deny) })
     }
 
@@ -5540,7 +5590,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             return give(remembered ? .grant : .deny)
         }
         // One question at a time, as for the camera.
-        guard decide == nil else { return give(.deny) }
+        guard decide == nil && sitePermissions.activePrompt == nil else { return give(.deny) }
         decide = give
         askedAbout = tab.shy ? "" : key
         let named = Browser.extensionScheme(origin.protocol) ? Browser.extensionName(origin.host) : origin.host
@@ -5562,7 +5612,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         if let remembered = SiteNotifications.choices[site] { return decisionHandler(remembered) }
         ask(from: webView, show: { [weak self] in
             guard let self else { return decisionHandler(false) }
-            guard decide == nil else { return decisionHandler(false) }
+            guard decide == nil && sitePermissions.activePrompt == nil else { return decisionHandler(false) }
             decide = { decision in
                 if decision == .grant { SiteNotifications.shared.authorize() }
                 decisionHandler(decision == .grant)
@@ -5644,6 +5694,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
             return
         }
         tab.didCommit()
+        sitePermissions.drop(tabID: tab.id)
         tab.extensionReturn.finished(navigation)
         if tab.id == activeID {
             invalidateFindPage(retryOnActiveTab: false)

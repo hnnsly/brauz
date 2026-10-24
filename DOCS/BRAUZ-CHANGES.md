@@ -14,6 +14,7 @@ Each section is headed by the tag it ships in, and the release workflow puts tha
 - Sleeping pinned tabs keep full opacity and show in greyscale instead of transparent darkening.
 - Faster page navigation by reusing installed page scripts across navigations with matching inputs.
 - Waking a sleeping tab keeps its snapshot cover until the page paints its first frame and crossfades smoothly into the live view, preventing white flashes and dropped clicks.
+- Sites requesting camera and microphone in tandem prompt once for both devices, and Settings › Privacy lists allowed site permissions with options to remove them.
 
 ## v1.0.5.b2
 

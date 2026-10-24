@@ -99,6 +99,7 @@ extension Browser {
     /// A page closed, gone to another address, or out of Split View: what it
     /// asked is answered as dismissed.
     func dropQuestions(for tab: Tab.ID? = nil) {
+        if let tab { sitePermissions.drop(tabID: tab) }
         let dropping = paneQuestions.filter { tab == nil || $0.tab == tab }
         guard !dropping.isEmpty else { return }
         paneQuestions.removeAll { question in dropping.contains { $0.id == question.id } }
