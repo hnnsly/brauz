@@ -60,7 +60,7 @@ The rest are edits and deletions inside upstream's files and can't move: the scr
 3. Injected page scripts add no `wheel` listeners, and nothing reports scroll position to the app on every frame.
 4. A suspended tab (`tab.paused`, `WKWebView.isSuspended`) is never asked to run JavaScript or take a snapshot. WebKit throws if it is. No early pause; draft max(delay, 1h). Sleep and suspension exemptions survive.
 5. Shortcuts match the physical key code as well as the character (`NSEvent.shortcutKey`), so they work on non-Latin layouts.
-6. `Updater` never checks Office Commun's feed. Brauz looks at its own GitHub releases instead (`BrauzUpdates.swift`), keeping release title format for parsing: `Brauz 1.0.4 (build 202610071500)`.
+6. `Updater` never checks Office Commun's feed. Brauz looks at its own GitHub releases instead (`BrauzUpdates.swift`), keeping release title format for parsing: `Brauz 1.0.4 (build 202610071500)`. The app's own Brauz version is the Info.plist key `BrauzVersion`, written by `build.sh` from the tag, while `CFBundleShortVersionString` stays Search's.
 7. The app is Brauz, `dev.aabc.brauz`, with its data in `Application Support/Brauz`, so it never shares settings, cookies or files with Search. No automatic profile copy. The icon is drawn in `Icon/icon.swift`. Names that only exist inside the code stay Search, which keeps saved passwords readable and syncs with upstream simple.
 8. The fork's commits never change `CHANGELOG.md`, which is upstream's. Brauz's own changes go in `DOCS/BRAUZ-CHANGES.md`, under `## Unreleased`.
 9. Little Window ordinary target blank vs JavaScript popups and blocker.
@@ -92,6 +92,7 @@ The rest are edits and deletions inside upstream's files and can't move: the scr
 - `Tests/real_site_timing.py`
 - `Tests/plainweb/main.swift`
 - `WakeCoverTests.swift`
+- `BrauzVersionTests.swift`
 - `Tests/wake_cover.py`
 - `DOCS/FORK.md`
 

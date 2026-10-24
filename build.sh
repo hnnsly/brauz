@@ -55,6 +55,22 @@ esac
 APP="$OUT/Brauz.app"
 NAME="Brauz"
 VERSION="$(tr -d '[:space:]' < VERSION)"
+# The Brauz release version for Info.plist: the GitHub release tag when built
+# in CI, otherwise the nearest tag plus commit count, falling back to VERSION.
+brauz_version() {
+  if [[ "${GITHUB_REF_NAME:-}" == v* ]]; then
+    echo "${GITHUB_REF_NAME#v}"
+    return
+  fi
+  local desc
+  desc="$(git describe --tags --match 'v*' 2>/dev/null || true)"
+  if [ -n "$desc" ]; then
+    echo "$desc" | sed -E -e 's/^v//' -e 's/-([0-9]+)-g[0-9a-fA-F]+$/+\1/'
+    return
+  fi
+  echo "$VERSION"
+}
+BRAUZ_VERSION="$(brauz_version)"
 # A build number that only ever goes up, so the updater can tell newer from
 # older without parsing version strings.
 BUILD="$(date +%Y%m%d%H%M)"
@@ -149,6 +165,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIdentifier</key><string>dev.aabc.brauz</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>BrauzVersion</key><string>$BRAUZ_VERSION</string>
   <key>CFBundleVersion</key><string>$BUILD</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   $ICONNAME
