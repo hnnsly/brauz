@@ -9,27 +9,35 @@ import WebKit
 // make twice.
 
 enum Store {
-    /// A run is a test run if it says so, or if it is being run straight out
-    /// of the build folder rather than from an installed app. The second half
-    /// is not belt and braces: a development build launched from a terminal
-    /// once wrote over somebody's real session, and asking a person to
-    /// remember a flag is not a safeguard.
+    /// A run is a test run if it says so, if it runs under XCTest, or if it is
+    /// being run straight out of the build folder rather than from an installed
+    /// app. Checking for XCTest is not belt and braces: a test class that
+    /// forgot SEARCH_PROBE once wrote over a real profile, and asking a test
+    /// to remember a flag is not a safeguard.
     static var testing: Bool {
         if ProcessInfo.processInfo.environment["SEARCH_PROBE"] != nil { return true }
+        if NSClassFromString("XCTestCase") != nil { return true }
         return Bundle.main.executablePath?.contains("/.build/") == true
     }
 
     /// Which test world a test run lives in. SEARCH_PROBE=1, or a run from
-    /// the build folder, is the test world, "Search (test)". SEARCH_PROBE=
-    /// <name> is a world of its own, "Search (<name>)", with settings and
-    /// WebKit stores of its own: two sessions testing at once, or a
-    /// measurement that needs a browser nobody has installed anything in,
-    /// never borrow each other's. Nil for the browser somebody is using.
+    /// the build folder, is the test world, "Search (test)". An XCTest run
+    /// without a probe gets "Search (xctest-<pid>)" so it never shares
+    /// fresh.sh's world. SEARCH_PROBE=<name> is a world of its own,
+    /// "Search (<name>)", with settings and WebKit stores of its own: two
+    /// sessions testing at once, or a measurement that needs a browser nobody
+    /// has installed anything in, never borrow each other's. Nil for the browser
+    /// somebody is using.
     static let world: String? = {
         guard testing else { return nil }
         let asked = (ProcessInfo.processInfo.environment["SEARCH_PROBE"] ?? "").lowercased()
             .filter { ($0.isASCII && ($0.isLetter || $0.isNumber)) || $0 == "-" }
-        return asked.isEmpty || asked == "1" || asked == "test" ? "test" : asked
+        if asked.isEmpty {
+            return NSClassFromString("XCTestCase") != nil
+                ? "xctest-\(ProcessInfo.processInfo.processIdentifier)"
+                : "test"
+        }
+        return asked == "1" || asked == "test" ? "test" : asked
     }()
 
     /// A test run there to be weighed and timed rather than driven
