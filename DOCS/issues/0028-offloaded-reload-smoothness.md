@@ -1,5 +1,5 @@
 ---
-status: fixing
+status: fixed
 found: 2026-10-23
 ---
 # Optimize and smooth out reloading experience when restoring offloaded pages

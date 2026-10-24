@@ -1,5 +1,5 @@
 ---
-status: fixing
+status: fixed
 found: 2026-10-23
 ---
 # HTTP Basic, Digest, and NTLM credentials should be remembered in browser passwords and filled on repeat visits

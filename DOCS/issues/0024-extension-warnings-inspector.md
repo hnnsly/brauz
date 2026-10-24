@@ -1,5 +1,5 @@
 ---
-status: fixing
+status: fixed
 found: 2026-10-23
 ---
 # Clickable warning count on extension row opens diagnostics sheet with WebKit and runtime error logs

@@ -1,5 +1,5 @@
 ---
-status: fixing
+status: fixed
 found: 2026-10-23
 ---
 # Sleeping pinned tabs keep full opacity and desaturate instead of dimming

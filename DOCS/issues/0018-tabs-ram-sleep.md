@@ -1,5 +1,5 @@
 ---
-status: fixing
+status: fixed
 found: 2026-10-23
 ---
 # Mac system sleep offloads background tabs to reclaim RAM

@@ -1,5 +1,5 @@
 ---
-status: fixing
+status: fixed
 found: 2026-10-23
 ---
 # Copy Clean Link: drop tracking query parameters on copied and shared links
