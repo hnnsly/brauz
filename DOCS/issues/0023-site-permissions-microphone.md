@@ -1,5 +1,5 @@
 ---
-status: open
+status: fixed
 found: 2026-10-23
 ---
 # Provide site permissions settings and inspection for camera, microphone, and location
@@ -25,20 +25,46 @@ Ruled out / wrong in the first draft:
 Fix the request bugs and add a per-site list in Settings under Privacy (Camera, Microphone, and Location per site, each removable) in a fork-only file with short hooks. When a page asks for the microphone and then the camera while the first prompt is still open, show one merged prompt ("site wants your camera and microphone") whose answer covers both requests. Clear the pending prompt when its tab closes or navigates away, and let a stored camera plus microphone grant satisfy a single-device request. Not chosen: keeping bulk reset only without per-site list, or ignoring concurrent media requests.
 
 ## Fix
-Implement request queueing and merging in `Sources/Search/Browser.swift` for concurrent media capture requests, add a composite permission check, ensure active prompt cleanup on tab close and navigation, and introduce a fork-only `Sources/Search/SitePermissions.swift` file for per-site inspection and revocation hooked into `Sources/Search/Settings.swift`.
+Extracted media capture permission management into `SitePermissionCoordinator` in fork-only `Sources/Search/SitePermissions.swift`:
+- Merges concurrent camera and microphone requests from the same site into a single prompt ("camera and microphone") resolving all handlers on answer.
+- Queues requests from different sites or tabs until the current prompt resolves. When dequeuing in `advanceQueue`, answers any queued request resolved by remembered decisions without prompting, merging only still-undecided requests into the next prompt.
+- Automatically denies and cleans up pending prompts and handlers when their tab closes or navigates away. Single cleanup hook via `dropQuestions(for:)` in `Dialogs.swift`. Coordinator handles tabs only (keyed by tab UUID).
+- Requests from web views that are not tabs (extension popups, side panels, offscreen documents) route through upstream's original `askedForCapture` path unchanged, prompting on the first request and refusing concurrent requests without denying the active prompt. Remembered decisions apply to popups as upstream did.
+- Satisfies single-device requests when a composite camera+microphone grant is already stored, without letting a composite deny suppress single-device requests. A composite request with one device denied and the other unknown prompts. Composite deny is only written when both devices are denied.
+- Added `SitePermissionsList` in Settings › Privacy listing per-site camera, microphone, and location permissions with Remove buttons.
+- Hooked coordinator into `Browser.swift`, `Dialogs.swift`, and `Settings.swift`.
+- Removed dead `dropAll`.
+
+Files touched:
+- `Sources/Search/SitePermissions.swift`
+- `Sources/Search/Browser.swift`
+- `Sources/Search/Dialogs.swift`
+- `Sources/Search/Settings.swift`
+- `Tests/SearchTests/SitePermissionsTests.swift`
 
 ## Guarded by
-`SitePermissionsTests` in `Tests/SearchTests/`.
+`SitePermissionsTests` in `Tests/SearchTests/SitePermissionsTests.swift` (`testAdvanceQueueResolvesGrantedDeviceWithoutPromptAndAsksUndecided`, `testExtensionPopupWebViewPromptsInsteadOfBeingDenied`, `testDenyCameraThenAskMicrophonePrompts`, `testTabCloseClearsPendingCaptureRequest`, and combinations).
 
 ## Acceptance
 - Concurrent camera and microphone requests show a merged prompt and succeed.
 - Closing a tab with a pending prompt clears the prompt state without blocking other tabs.
 - Settings provides a per-site inspection and removal interface for camera, microphone, and location permissions.
+- Denying camera still allows microphone to prompt without being denied.
+- Extension popup web views prompt for media capture rather than being denied.
 
 ## Files
-- `Sources/Search/Browser.swift`
 - `Sources/Search/SitePermissions.swift`
+- `Sources/Search/Browser.swift`
+- `Sources/Search/Dialogs.swift`
 - `Sources/Search/Settings.swift`
+- `Tests/SearchTests/SitePermissionsTests.swift`
 
 ## Test by hand
-Visit a WebRTC conferencing site requesting both camera and microphone, check the merged prompt, and verify site permissions appear in Settings under Privacy.
+Start with `DEVELOPER_DIR=/Volumes/pet30-a/apps/xcode/Xcode.app/Contents/Developer ./build.sh` then `open build/Brauz.app`.
+1. Open a conferencing site (e.g. Yandex Telemost or Google Meet): expect a single merged prompt asking for camera and microphone rather than microphone failing.
+2. Click Allow: expect both media streams to connect.
+3. Open Settings › Privacy: expect to see the site with separate "Can use camera" and "Can use microphone" rows, each with a Remove pill.
+4. Click Remove on Camera: reload the page and expect the prompt to ask for camera again while microphone remains granted.
+5. Open two tabs on the same site; have tab 1 request camera and tab 2 request microphone then camera; allow tab 1's camera: expect tab 2's camera granted without a prompt and only microphone asked.
+6. Open an extension popup requesting media: expect prompt to appear, subsequent request refused without canceling the prompt, and Allow to grant capture.
+What no automated test covers: live AVFoundation hardware access and WebKit media hardware stream acquisition.

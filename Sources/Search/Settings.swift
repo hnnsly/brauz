@@ -653,6 +653,7 @@ struct SettingsPanel: View {
                 Line("Camera, microphone, location and notifications", "What each site was allowed or refused, and the sites whose videos don't float") {
                     Pill("Forget choices") { browser.forgetCaptureChoices() }
                 }
+                SitePermissionsList()
                 Rule()
                 Line("Let sites ask to send notifications", "A site asks on a card over its page, and only one you allow reaches your Mac's notifications. Private tabs are never asked") {
                     Switch(on: $prefs.siteNotifications)
