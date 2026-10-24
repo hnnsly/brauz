@@ -95,7 +95,8 @@ enum Web {
         // Chrome extensions see every page but a private one, unless Settings
         // › Extensions says they may. The controller has to be there when the
         // view is made; it can't be added after.
-        if #available(macOS 15.4, *), !shy || Store.settings.bool(forKey: "extensions.private") {
+        let extensionsDisabledForTesting = Store.testing && Store.settings.bool(forKey: "extensions.off")
+        if #available(macOS 15.4, *), (!shy || Store.settings.bool(forKey: "extensions.private")), !extensionsDisabledForTesting {
             MainActor.assumeIsolated { Extensions.attach(config) }
         }
         // Left alone, WKWebView says only "AppleWebKit … (KHTML, like Gecko)" —
