@@ -8,6 +8,7 @@ Each section is headed by the tag it ships in, and the release workflow puts tha
 
 - Launch no longer reopens saved windows that have no tabs. Thousands of them in `windows.json` left empty windows on screen and could hang the launch.
 - Background tabs sleep immediately when your Mac sleeps, freeing memory while keeping visible tabs and active drafts awake.
+- HTTP sign-in prompts offer a "Remember in Brauz" checkbox, save accepted credentials to Passwords, and prefill name and password on subsequent visits.
 
 ## v1.0.5.b2
 

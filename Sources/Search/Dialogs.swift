@@ -302,6 +302,9 @@ extension Browser {
         _ challenge: URLAuthenticationChallenge,
         _ completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
+        if challenge.previousFailureCount > 0 {
+            BasicAuth.challengeFailed(for: webView, space: challenge.protectionSpace)
+        }
         guard challenge.previousFailureCount < 2 else {
             completionHandler(.cancelAuthenticationChallenge, nil)
             return
@@ -311,7 +314,10 @@ extension Browser {
         // that page's. It waits for its own tab, as a page's questions do.
         ask(from: webView, show: { [weak self] in
             self?.askSignIn(webView, challenge, completionHandler)
-        }, drop: { completionHandler(.cancelAuthenticationChallenge, nil) })
+        }, drop: {
+            BasicAuth.cancel(for: webView)
+            completionHandler(.cancelAuthenticationChallenge, nil)
+        })
     }
 
     private func askSignIn(
@@ -329,25 +335,40 @@ extension Browser {
         alert.addButton(withTitle: "Sign In")
         alert.addButton(withTitle: "Cancel")
 
-        let box = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 56))
-        let name = NSTextField(frame: NSRect(x: 0, y: 32, width: 260, height: 24))
+        let box = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 84))
+        let name = NSTextField(frame: NSRect(x: 0, y: 60, width: 260, height: 24))
         name.placeholderString = "Name"
-        let pass = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        let pass = NSSecureTextField(frame: NSRect(x: 0, y: 28, width: 260, height: 24))
         pass.placeholderString = "Password"
+        let remember = NSButton(checkboxWithTitle: "Remember in Brauz", target: nil, action: nil)
+        remember.frame = NSRect(x: 0, y: 0, width: 260, height: 20)
+        remember.state = .on
+
+        if let saved = BasicAuth.credential(for: space) {
+            name.stringValue = saved.user
+            pass.stringValue = saved.password
+        }
+
         name.nextKeyView = pass
+        pass.nextKeyView = remember
         box.addSubview(name)
         box.addSubview(pass)
+        box.addSubview(remember)
         alert.accessoryView = box
-        alert.window.initialFirstResponder = name
+        alert.window.initialFirstResponder = name.stringValue.isEmpty ? name : pass
 
         Dialogs.show(alert, over: webView) { answer in
             guard answer == .alertFirstButtonReturn else {
+                BasicAuth.cancel(for: webView)
                 completionHandler(.cancelAuthenticationChallenge, nil)
                 return
             }
+            let user = name.stringValue
+            let password = pass.stringValue
+            BasicAuth.stage(for: webView, space: space, user: user, password: password, remember: remember.state == .on)
             completionHandler(
                 .useCredential,
-                URLCredential(user: name.stringValue, password: pass.stringValue, persistence: .forSession)
+                URLCredential(user: user, password: password, persistence: .forSession)
             )
         }
     }
