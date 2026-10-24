@@ -59,6 +59,7 @@ The rest are edits and deletions inside upstream's files and can't move: the scr
 9. Little Window ordinary target blank vs JavaScript popups and blocker.
 10. Closing the current ordinary tab selects its surviving split partner first, otherwise the last-viewed surviving tab in the current window and space, then the existing positional neighbor fallback if no history survives. Uses TabSwitcher departure history and Browser.select so sleeping tabs wake. Pinned put-down and last-tab settings stay upstream.
 11. An already open vertical sidebar stays open when the pointer is outside its actual window or over another app; normal auto-hide resumes on return to the page; pending hides recheck eligibility; existing opening/overshoot, explicit controls and horizontal strip are unchanged.
+12. A test never reaches the real profile. Any XCTest process is a test run (`Store.testing`), with a world of its own (`xctest-<pid>` unless `SEARCH_PROBE` names one), and so its own folder, settings and Keychain label. Test classes still set `SEARCH_PROBE` in `override class func setUp()`. `StoreIsolationTests` fails if a test sees the real folder.
 
 ## Fork-only Tests
 
@@ -70,6 +71,7 @@ The rest are edits and deletions inside upstream's files and can't move: the scr
 - `BrauzUpdatesTests.swift`
 - `TabCloseTests.swift`
 - `FoldPeekTests.swift`
+- `StoreIsolationTests.swift`
 - `Tests/sidebar_window_exit.py`
 - `Tests/little_extensions.py`
 - `DOCS/FORK.md`
